@@ -12,17 +12,12 @@ while True:
     depth = depth.astype(np.uint8).transpose()
     iD = Image(depth)
 
-    #image = ds.getColourMap()
-    #image = image[:,:,::-1]
-    #iS = Image(image.transpose([1,0,2]))
-    #iS.sideBySide(iD).show()
-    #iS.show()
-    #dblobs = iD.findBlobs()
-    #if dblobs:
-    #    dblobs.draw()
+    image = ds.getColourMap()
+    image = image[:,:,::-1]
+    iS = Image(image.transpose([1,0,2]))
+    iS.sideBySide(iD).show()
+ 
     c+=1
-    iD.show()
     if c > 10000:
-        ds.killDepthSense()
         break
 

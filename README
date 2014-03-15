@@ -2,3 +2,9 @@ Requires: depthsense sdk, python2, simplecv
 Make sure to add the softkinect.conf file to your /etc/ld.conf.d/ folder for linking
 
 Looks for sdk in /opt/softkinect folder. You can get the SDK from softkinect sites
+
+
+If everythings inorder, install with the following command:
+	sudo python2 setup.py install
+
+run test.py to see if its all good
