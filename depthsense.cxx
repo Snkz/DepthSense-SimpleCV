@@ -48,7 +48,7 @@
 using namespace DepthSense;
 using namespace std;
 
-// depth sense node inits 
+// depth sense node inits
 static Context g_context;
 static DepthNode g_dnode;
 static ColorNode g_cnode;
@@ -56,13 +56,13 @@ static AudioNode g_anode;
 
 static bool g_bDeviceFound = false;
 
-// unecassary frame counters 
+// unecassary frame counters
 static uint32_t g_aFrames = 0;
 static uint32_t g_cFrames = 0;
 static uint32_t g_dFrames = 0;
 
 
-// map dimensions 
+// map dimensions
 static int32_t dW = 320;
 static int32_t dH = 240;
 static int32_t cW = 640;
@@ -71,6 +71,7 @@ static int32_t cH = 480;
 int dshmsz = dW*dH*sizeof(uint16_t);
 int cshmsz = cW*cH*sizeof(uint8_t);
 int vshmsz = dW*dH*sizeof(int16_t);
+int ushmsz = dW*dH*sizeof(float);
 
 // shared mem depth maps
 static uint16_t *depthMap;
@@ -84,10 +85,21 @@ static int16_t *vertexFullMap;
 static uint8_t *colourMap;
 static uint8_t *colourFullMap;
 
-// internal map copies 
+// shared mem accel maps
+static float *accelMap;
+static float *accelFullMap;
+
+// shared mem uv maps
+static float *uvMap;
+static float *uvFullMap;
+
+// internal map copies
 static uint8_t colourMapClone[640*480*3];
 static uint16_t depthMapClone[320*240];
 static int16_t vertexMapClone[320*240*3];
+static float accelMapClone[3];
+static float uvMapClone[320*240*2];
+static uint8_t syncMapClone[320*240*3];
 
 int child_pid = 0;
 
@@ -100,6 +112,12 @@ static void dptrSwap (uint16_t **pa, uint16_t **pb){
 
 static void cptrSwap (uint8_t **pa, uint8_t **pb){
         uint8_t *temp = *pa;
+        *pa = *pb;
+        *pb = temp;
+}
+
+static void aptrSwap (float **pa, float **pb){
+        float *temp = *pa;
         *pa = *pb;
         *pb = temp;
 }
@@ -118,8 +136,6 @@ static void onNewAudioSample(AudioNode node, AudioNode::NewSampleReceivedData da
     g_aFrames++;
 }
 
-
-
 /*----------------------------------------------------------------------------*/
 // New color sample event handler
 static void onNewColorSample(ColorNode node, ColorNode::NewSampleReceivedData data)
@@ -134,21 +150,44 @@ static void onNewColorSample(ColorNode node, ColorNode::NewSampleReceivedData da
 // New depth sample event handler
 static void onNewDepthSample(DepthNode node, DepthNode::NewSampleReceivedData data)
 {
+    // Depth
     memcpy(depthMap, data.depthMap, dshmsz);
     dptrSwap(&depthMap, &depthFullMap);
 
+    // Verticies
+    Vertex vertex;
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
-            Vertex vertex = data.vertices[i*dW + j];
+            vertex = data.vertices[i*dW + j];
             vertexMap[i*dW*3 + j*3 + 0] = vertex.x;
             vertexMap[i*dW*3 + j*3 + 1] = vertex.y;
             vertexMap[i*dW*3 + j*3 + 2] = vertex.z;
             //cout << vertex.x << vertex.y << vertex.z << endl;
-            
+
         }
     }
-
     vptrSwap(&vertexMap, &vertexFullMap);
+
+    // uv
+    UV uv;
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            uv = data.uvMap[i*dW + j];
+            uvMap[i*dW*2 + j*2 + 0] = uv.u;
+            uvMap[i*dW*2 + j*2 + 1] = uv.v;
+            //cout << uv.u << uv.v << endl;
+
+        }
+    }
+    aptrSwap(&uvMap, &uvFullMap);
+
+
+    // Acceleration
+    accelMap[0] = data.acceleration.x;
+    accelMap[1] = data.acceleration.y;
+    accelMap[2] = data.acceleration.z;
+    aptrSwap(&accelMap, &accelFullMap);
+
     g_dFrames++;
 }
 
@@ -160,12 +199,12 @@ static void configureAudioNode()
     AudioNode::Configuration config = g_anode.getConfiguration();
     config.sampleRate = 44100;
 
-    try 
+    try
     {
         g_context.requestControl(g_anode,0);
 
         g_anode.setConfiguration(config);
-        
+
         g_anode.setInputMixerLevel(0.5f);
     }
     catch (ArgumentException& e)
@@ -199,16 +238,19 @@ static void configureDepthNode()
     config.frameFormat = FRAME_FORMAT_QVGA;
     config.framerate = 30;
     config.mode = DepthNode::CAMERA_MODE_CLOSE_MODE;
-    //config.mode = DepthNode::CAMERA_MODE_LONG_RANGE;
     config.saturation = true;
-    try 
+
+    try
     {
         g_context.requestControl(g_dnode,0);
         g_dnode.setConfidenceThreshold(100);
-        g_dnode.setConfiguration(config);
 
         g_dnode.setEnableDepthMap(true);
         g_dnode.setEnableVertices(true);
+        g_dnode.setEnableAccelerometer(true);
+        g_dnode.setEnableUvMap(true);
+
+        g_dnode.setConfiguration(config);
 
     }
     catch (ArgumentException& e)
@@ -245,6 +287,7 @@ static void configureDepthNode()
 /*----------------------------------------------------------------------------*/
 static void configureColorNode()
 {
+
     // connect new color sample handler
     g_cnode.newSampleReceivedEvent().connect(&onNewColorSample);
 
@@ -254,10 +297,13 @@ static void configureColorNode()
     config.powerLineFrequency = POWER_LINE_FREQUENCY_50HZ;
     config.framerate = 30;
 
+    g_cnode.setEnableColorMap(true);
 
-    try 
+    try
     {
         g_context.requestControl(g_cnode,0);
+
+        g_cnode.setConfiguration(config);
         g_cnode.setBrightness(0);
         g_cnode.setContrast(5);
         g_cnode.setSaturation(5);
@@ -266,9 +312,8 @@ static void configureColorNode()
         g_cnode.setWhiteBalance(4650);
         g_cnode.setSharpness(5);
         g_cnode.setWhiteBalanceAuto(true);
-        g_cnode.setConfiguration(config);
 
-        g_cnode.setEnableColorMap(true);
+
     }
     catch (ArgumentException& e)
     {
@@ -298,7 +343,7 @@ static void configureColorNode()
     {
         printf("TimeoutException\n");
     }
-    
+
 }
 
 /*----------------------------------------------------------------------------*/
@@ -322,7 +367,8 @@ static void configureNode(Node node)
     {
         g_anode = node.as<AudioNode>();
         configureAudioNode();
-        g_context.registerNode(node);
+        // Audio seems to take up bandwith on usb3.0 devices ... we'll make this a param
+        //g_context.registerNode(node);
     }
 }
 
@@ -364,6 +410,9 @@ static void onDeviceDisconnected(Context context, Context::DeviceRemovedData dat
 
 extern "C" {
     static void killds(){
+        if (child_pid == 0) {
+
+        }
         if (child_pid !=0)
             kill(child_pid, SIGTERM);
             munmap(depthMap, dshmsz);
@@ -372,7 +421,8 @@ extern "C" {
             munmap(colourFullMap, cshmsz*3);
             munmap(vertexMap, vshmsz*3);
             munmap(vertexFullMap, vshmsz*3);
-
+            munmap(uvMap, ushmsz*2);
+            munmap(uvFullMap, ushmsz*2);
 
     }
 }
@@ -381,36 +431,62 @@ static void initds()
 {
     // shared mem double buffers
     if ((depthMap = (uint16_t *) mmap(NULL, dshmsz, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;"); 
-        exit(1); 
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
     }
 
     if ((depthFullMap = (uint16_t *) mmap(NULL, dshmsz, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;"); 
-        exit(1); 
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
     }
 
+    // shared mem double buffers
+    if ((accelMap = (float *) mmap(NULL, 3*sizeof(float), PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
+    }
+
+    if ((accelFullMap = (float *) mmap(NULL, 3*sizeof(float), PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
+    }
+
+    // shared mem double buffers
     if ((colourMap = (uint8_t *) mmap(NULL, cshmsz*3, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;"); 
-        exit(1); 
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
     }
 
     if ((colourFullMap = (uint8_t *) mmap(NULL, cshmsz*3, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;"); 
-        exit(1); 
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
     }
-    
+
+    // shared mem double buffers
     if ((vertexMap = (int16_t *) mmap(NULL, vshmsz*3, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;"); 
-        exit(1); 
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
     }
 
     if ((vertexFullMap = (int16_t *) mmap(NULL, vshmsz*3, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;"); 
-        exit(1); 
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
     }
-    // child goes into loop
+
+    // shared mem double buffers
+    if ((uvMap = (float *) mmap(NULL, ushmsz*2, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
+    }
+
+    if ((uvFullMap = (float *) mmap(NULL, ushmsz*2, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
+    }
+
+
     child_pid = fork();
+    // child goes into loop
     if (child_pid == 0) {
         g_context = Context::create("localhost");
         g_context.deviceAddedEvent().connect(&onDeviceConnected);
@@ -428,9 +504,9 @@ static void initds()
             da[0].nodeRemovedEvent().connect(&onNodeDisconnected);
 
             vector<Node> na = da[0].getNodes();
-            
+
             //printf("Found %u nodes\n",na.size());
-            
+
             for (int n = 0; n < (int)na.size();n++)
                 configureNode(na[n]);
         }
@@ -449,7 +525,7 @@ static void initds()
 }
 /*----------------------------------------------------------------------------*/
 
-static PyObject *getColour(PyObject *self, PyObject *args) 
+static PyObject *getColour(PyObject *self, PyObject *args)
 {
     npy_intp dims[3] = {cH, cW, 3};
 
@@ -457,7 +533,7 @@ static PyObject *getColour(PyObject *self, PyObject *args)
     return PyArray_SimpleNewFromData(3, dims, NPY_UINT8, colourMapClone);
 }
 
-static PyObject *getDepth(PyObject *self, PyObject *args) 
+static PyObject *getDepth(PyObject *self, PyObject *args)
 {
     npy_intp dims[2] = {dH, dW};
 
@@ -465,12 +541,71 @@ static PyObject *getDepth(PyObject *self, PyObject *args)
     return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, depthMapClone);
 }
 
-static PyObject *getVertex(PyObject *self, PyObject *args) 
+static PyObject *getAccel(PyObject *self, PyObject *args)
+{
+    npy_intp dims[1] = {3};
+
+    memcpy(accelMapClone, accelFullMap, 3*sizeof(float));
+    return PyArray_SimpleNewFromData(1, dims, NPY_FLOAT32, accelMapClone);
+}
+
+static PyObject *getVertex(PyObject *self, PyObject *args)
 {
     npy_intp dims[3] = {dH, dW, 3};
     memcpy(vertexMapClone, vertexFullMap, vshmsz*3);
     return PyArray_SimpleNewFromData(3, dims, NPY_INT16, vertexMapClone);
 }
+
+static PyObject *getUV(PyObject *self, PyObject *args)
+{
+    npy_intp dims[3] = {dH, dW, 3};
+    memcpy(uvMapClone, uvFullMap, ushmsz*2);
+    return PyArray_SimpleNewFromData(3, dims, NPY_FLOAT32, uvMapClone);
+}
+
+static PyObject *getSync(PyObject *self, PyObject *args)
+{
+    npy_intp dims[3] = {dH, dW, 3};
+
+    memcpy(uvMapClone, uvFullMap, ushmsz*2);
+    memcpy(colourMapClone, colourFullMap, cshmsz*3);
+    memcpy(depthMapClone, depthFullMap, dshmsz);
+    
+    int ci, cj;
+    uint8_t colx;
+    uint8_t coly;
+    uint8_t colz;
+    float uvx;
+    float uvy;
+
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            uvx = uvMapClone[i*dW*2 + j*2 + 0];    
+            uvy = uvMapClone[i*dW*2 + j*2 + 1];    
+            colx = 0;
+            coly = 0;
+            colz = 0;
+            
+            if((uvx > 0 && uvx < 1 && uvy > 0 && uvy < 1) && 
+                (depthMapClone[i*dW + j] < 32000)){
+                ci = (int) (uvy * ((float) cH));
+                cj = (int) (uvx * ((float) cW));
+                colx = colourMapClone[ci*cW*3 + cj*3 + 0];
+                coly = colourMapClone[ci*cW*3 + cj*3 + 1];
+                colz = colourMapClone[ci*cW*3 + cj*3 + 2];
+            }
+          
+            
+            syncMapClone[i*dW*3 + j*3 + 0] = colx;
+            syncMapClone[i*dW*3 + j*3 + 1] = coly;
+            syncMapClone[i*dW*3 + j*3 + 2] = colz;
+
+        }
+    }
+
+    return PyArray_SimpleNewFromData(3, dims, NPY_UINT8, syncMapClone);
+}
+
 
 static PyObject *initDepthS(PyObject *self, PyObject *args)
 {
@@ -488,6 +623,9 @@ static PyMethodDef DepthSenseMethods[] = {
     {"getDepthMap",  getDepth, METH_VARARGS, "Get Depth Map"},
     {"getColourMap",  getColour, METH_VARARGS, "Get Colour Map"},
     {"getVertices",  getVertex, METH_VARARGS, "Get Vertex Map"},
+    {"getUVMap",  getUV, METH_VARARGS, "Get UV Map"},
+    {"getSyncMap",  getSync, METH_VARARGS, "Get Colour Overlay Map"},
+    {"getAcceleration",  getAccel, METH_VARARGS, "Get Acceleration"},
     {"initDepthSense",  initDepthS, METH_VARARGS, "Init DepthSense"},
     {"killDepthSense",  killDepthS, METH_VARARGS, "Kill DepthSense"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
@@ -503,7 +641,7 @@ PyMODINIT_FUNC initDepthSense(void)
 
 int main(int argc, char* argv[])
 {
-    
+
     /* Pass argv[0] to the Python interpreter */
     Py_SetProgramName((char *)"DepthSense");
 
@@ -514,6 +652,6 @@ int main(int argc, char* argv[])
     initDepthSense();
 
     //initds(); //for testing
-    
+
     return 0;
 }

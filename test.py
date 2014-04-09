@@ -1,5 +1,4 @@
 #!/bin/python2
-
 import DepthSense as ds
 import numpy as np
 from SimpleCV import *
@@ -22,15 +21,18 @@ while True:
     image = ds.getColourMap()
     image = image[:,:,::-1]
     iS = Image(image.transpose([1,0,2]))
-    iV.sideBySide(iD).show()
-
     #iS.show()
-    ##dblobs = iD.findBlobs()
-    ##if dblobs:
-    ##    dblobs.draw()
-    #c+=1
-    #iD.show()
-    #if c > 10000:
-    #    ds.killDepthSense()
-    #    break
+
+    #print ds.getAcceleration()
+
+    uv = ds.getUVMap()
+
+    sync = ds.getSyncMap()
+    sync = sync[:,:,::-1]
+    iY = Image(sync.transpose([1,0,2]))
+    #iY.show()
+    
+    
+    #iV.sideBySide(iD).show()
+    c+=1
 
