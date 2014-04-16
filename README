@@ -7,4 +7,4 @@ Looks for sdk in /opt/softkinect folder. You can get the SDK from softkinect sit
 If everythings inorder, install with the following command:
 	sudo python2 setup.py install
 
-run test.py to see if its all good
+run sample_use.py to see if its all good
