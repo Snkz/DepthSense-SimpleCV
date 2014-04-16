@@ -13,6 +13,6 @@ setup (name = 'DepthSense',
         author = 'Abdi Dahir',
         author_email = 'abdi.dahir@outlook.com',
         url = 'http://github.com/snkz/DepthSense-SimpleCV',
-        long_description = '''The Python DepthSense SDK wrapper allows basic i
+        long_description = '''The Python DepthSense SDK wrapper allows basic
         interaction with the DepthSense camera, compitable with SimpleCV.''',
         ext_modules = [module])
