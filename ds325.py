@@ -22,10 +22,33 @@ class DS325:
         iD = Image(depth.transpose())
         return iD.invert()
 
+
+    def getEdges(self, kern, rep):
+        '''Apply the specified kernel to the depth map 
+           kern in ["edge", "edge", "blur", "lapl", "sobx", "soby", "shrp"] 
+        '''
+
+        edge = ds.getEdges(kern, rep)
+        np.clip(edge, 0, 2**10 - 1, edge)
+        edge >>=2
+        edge = edge.astype(np.uint8)
+        iE = Image(edge.transpose())
+        return iE.invert()
+
+
     def getDepthFull(self):
         ''' Return the pure 16bit depth map as a numpy array '''
+         
+        depth = ds.getDepthMap()
+        iD = (depth.transpose())
+        return iD
 
-        return ds.getDepthMap()
+    def getEdgesFull(self, kern, rep):
+        ''' Return a pure numpy array of highlighted edges in the depthmap ''' 
+
+        edge = ds.getEdges(kern, rep)
+        iE = (edge.transpose())
+        return iE
 
     def getVertex(self):
         ''' Return a vertex map for points in the depth map as a numpy array'''
@@ -38,6 +61,15 @@ class DS325:
         image = ds.getColourMap()
         image = image[:,:,::-1]
         return Image(image.transpose([1,0,2]))
+
+
+    def getDepthColoured(self):
+        ''' Return a simple cv compatiable 8bit colour image ''' 
+
+        depthc = ds.getDepthColouredMap()
+        depthc = depthc[:,:,::-1]
+        return Image(depthc.transpose([1,0,2]))
+
 
     def getAcceleration(self):
         ''' Return the current acceleration of the device (x,y,z) measured in 

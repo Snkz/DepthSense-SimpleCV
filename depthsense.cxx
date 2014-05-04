@@ -28,6 +28,7 @@
 #include <windows.h>
 #endif
 
+
 // C includes
 #include <stdio.h>
 #include <sys/types.h>
@@ -35,11 +36,14 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 
 // C++ includes
 #include <vector>
 #include <exception>
 #include <iostream>
+#include <list>
+#include<map>
 //#include <thread>
 
 // DepthSense SDK includes
@@ -72,6 +76,7 @@ int dshmsz = dW*dH*sizeof(uint16_t);
 int cshmsz = cW*cH*sizeof(uint8_t);
 int vshmsz = dW*dH*sizeof(int16_t);
 int ushmsz = dW*dH*sizeof(float);
+int hshmsz = dW*dH*sizeof(uint8_t);
 
 // shared mem depth maps
 static uint16_t *depthMap;
@@ -101,6 +106,55 @@ static float accelMapClone[3];
 static float uvMapClone[320*240*2];
 static uint8_t syncMapClone[320*240*3];
 
+// colouring depth map
+static uint16_t depthCMap[320*240];
+static uint8_t depthColouredMap[320*240*3];
+static uint8_t depthColouredMapClone[320*240*3];
+
+// internal maps for edge finding
+static uint16_t edgeMap[320*240];
+static uint16_t edgeResult[320*240];
+static uint16_t edgeResultClone[320*240];
+
+// kernels
+static int edgeKern[9] = { 0,  1,  0, 
+                           1, -4,  1, 
+                           0,  1,  0 };
+
+static int sharpKern[9] = {  0, -1,  0, 
+                            -1,  5, -1, 
+                             0, -1,  0 };
+
+static int ogKern[9] = { 0, 0, 0, 
+                         0, 1, 0, 
+                         0, 0, 0 };
+
+static int embossKern[9] = { -2, -1,  0, 
+                             -1,  1,  1, 
+                              0,  1,  2 };
+
+static int edgeHighKern[9] = { -1, -1, -1, 
+                               -1,  8, -1, 
+                               -1, -1, -1 };
+
+static int blurKern[9] = { 1,  2,  1,  // needs to be handled differently
+                           2,  4,  2, 
+                           1,  2,  1 };
+
+static int sobelYKern[9] = { 1, 0, -1, 
+                             2, 0, -2, 
+                             1, 0, -1 };
+
+static int sobelXKern[9] = { -1, 0, 1, 
+                             -2, 0, 2, 
+                             -1, 0, 1 };
+
+static int lapKern[9] = {   1,  -2,   1,  // needs to be handled differently
+                           -2,   4,  -2, 
+                            1,  -2,   1 };
+
+
+// clean up
 int child_pid = 0;
 
 // can't write atomic op but i can atleast do a swap
@@ -412,16 +466,10 @@ static void onDeviceDisconnected(Context context, Context::DeviceRemovedData dat
 /*                         Data processors                                    */
 /*----------------------------------------------------------------------------*/
 
-/* 
- * the at exit call back. kill the depthsense node process as well as
- * clean up the shared mem regions
- */
 extern "C" {
-    static void killds(){
-        if (child_pid == 0) {
-
-        }
-        if (child_pid !=0)
+    static void killds()
+    {
+        if (child_pid !=0) {
             kill(child_pid, SIGTERM);
             munmap(depthMap, dshmsz);
             munmap(depthFullMap, dshmsz);
@@ -431,74 +479,43 @@ extern "C" {
             munmap(vertexFullMap, vshmsz*3);
             munmap(uvMap, ushmsz*2);
             munmap(uvFullMap, ushmsz*2);
+        }
 
     }
 }
 
-/* 
- * init the shared mem regions and fork the depthsense "turn on nodes" code
- * preparation for the two levels of async callbacks 
- * (one two and from the nodes, the other two and from python method calls)
- */
+static void * initmap(int sz) 
+{
+    void * map;     
+    if ((map = mmap(NULL, sz, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
+        perror("mmap: cannot alloc shmem;");
+        exit(1);
+    }
+
+    return map;
+}
+
 static void initds()
 {
     // shared mem double buffers
-    if ((depthMap = (uint16_t *) mmap(NULL, dshmsz, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
+    depthMap = (uint16_t *) initmap(dshmsz); 
+    depthFullMap = (uint16_t *) initmap(dshmsz); 
 
-    if ((depthFullMap = (uint16_t *) mmap(NULL, dshmsz, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
+    accelMap = (float *) initmap(3*sizeof(float)); 
+    accelFullMap = (float *) initmap(3*sizeof(float)); 
 
-    // shared mem double buffers
-    if ((accelMap = (float *) mmap(NULL, 3*sizeof(float), PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
+    colourMap = (uint8_t *) initmap(cshmsz*3); 
+    colourFullMap = (uint8_t *) initmap(cshmsz*3); 
 
-    if ((accelFullMap = (float *) mmap(NULL, 3*sizeof(float), PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
+    vertexMap = (int16_t *) initmap(vshmsz*3); 
+    vertexFullMap = (int16_t *) initmap(vshmsz*3); 
+    
+    uvMap = (float *) initmap(ushmsz*2); 
+    uvFullMap = (float *) initmap(ushmsz*2); 
 
-    // shared mem double buffers
-    if ((colourMap = (uint8_t *) mmap(NULL, cshmsz*3, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
-
-    if ((colourFullMap = (uint8_t *) mmap(NULL, cshmsz*3, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
-
-    // shared mem double buffers
-    if ((vertexMap = (int16_t *) mmap(NULL, vshmsz*3, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
-
-    if ((vertexFullMap = (int16_t *) mmap(NULL, vshmsz*3, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
-
-    // shared mem double buffers
-    if ((uvMap = (float *) mmap(NULL, ushmsz*2, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
-
-    if ((uvFullMap = (float *) mmap(NULL, ushmsz*2, PROT_READ|PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0)) == MAP_FAILED) {
-        perror("mmap: cannot alloc shmem;");
-        exit(1);
-    }
-
-
+    // kerns
     child_pid = fork();
+
     // child goes into loop
     if (child_pid == 0) {
         g_context = Context::create("localhost");
@@ -542,8 +559,8 @@ static void initds()
  * with the resoloution of the depth map with pixels that exist in both the 
  * depth and colour map exclusively (that info is provided by the uv map)
  */
-static void buildSyncMap() {
-
+static void buildSyncMap()
+{
     int ci, cj;
     uint8_t colx;
     uint8_t coly;
@@ -575,10 +592,104 @@ static void buildSyncMap() {
 
         }
     }
+}
 
+static void pickKern(char* kern, int kernel[9]) {
+
+    if (strncmp(kern, "edge", 4) == 0) 
+        memcpy(kernel, edgeKern, 9*sizeof(int) );
+    if (strncmp(kern, "shrp", 4) == 0) 
+        memcpy(kernel, sharpKern, 9*sizeof(int) );
+    if (strncmp(kern, "iden", 4) == 0) 
+        memcpy(kernel, ogKern, 9*sizeof(int) );
+    if (strncmp(kern, "blur", 4) == 0) 
+        memcpy(kernel, blurKern, 9*sizeof(int) );
+    if (strncmp(kern, "sobx", 4) == 0) 
+        memcpy(kernel, sobelXKern, 9*sizeof(int) );
+    if (strncmp(kern, "soby", 4) == 0) 
+        memcpy(kernel, sobelYKern, 9*sizeof(int) );
+    if (strncmp(kern, "embs", 4) == 0) 
+        memcpy(kernel, embossKern, 9*sizeof(int) );
+    if (strncmp(kern, "edgh", 4) == 0) 
+        memcpy(kernel, edgeHighKern, 9*sizeof(int) );
+    if (strncmp(kern, "lapl", 4) == 0) 
+        memcpy(kernel, lapKern, 9*sizeof(int) );
+}
+
+static int convolve(int i, int j, int kern[9], char *kernel) {
+    int edge = 0; int w = 3;
+    edge = edge + kern[1*w +1] * (int)edgeMap[i*dW + j];
+    // UP AND DOWN
+    if (i - 1 > 0)
+        edge = edge + kern[0*w + 1] * (int)edgeMap[(i-1)*dW + j];
+    else
+        edge = edge + kern[0*w + 1] * (int)edgeMap[(i-0)*dW + j]; // extend
+
+    if (i + 1 < dH)
+        edge = edge + kern[2*w + 1] * (int)edgeMap[(i+1)*dW + j];
+    else
+        edge = edge + kern[2*w + 1] * (int)edgeMap[(i+0)*dW + j]; // extend
+
+    // LEFT AND RIGHT
+    if (j - 1 > 0)
+        edge = edge + kern[1*w + 0] * (int)edgeMap[i*dW + (j-1)]; 
+    else                    
+        edge = edge + kern[1*w + 0] * (int)edgeMap[i*dW + (j-0)]; // extend
+
+    if (j + 1 < dW)         
+        edge = edge + kern[1*w + 2] * (int)edgeMap[i*dW + (j+1)]; 
+    else                    
+        edge = edge + kern[1*w + 2] * (int)edgeMap[i*dW + (j+0)]; // extend
+    
+    // UP LEFT AND UP RIGHT
+    if ((j - 1 > 0) && (i - 1) > 0)
+        edge = edge + kern[0*w + 0] * (int)edgeMap[(i-1)*dW + (j-1)]; 
+    else                    
+        edge = edge + kern[0*w + 0] * (int)edgeMap[(i-0)*dW + (j-0)]; // extend
+
+    if ((j + 1 < dW) && (i - 1) > 0)
+        edge = edge + kern[0*w + 2] * (int)edgeMap[(i-1)*dW + (j+1)]; 
+    else                     
+        edge = edge + kern[0*w + 2] * (int)edgeMap[(i-0)*dW + (j+0)]; // extend
+    
+    // DOWN LEFT AND DOWN RIGHT
+    if ((j - 1 > 0) && (i + 1) < dH)
+        edge = edge + kern[2*w + 0] * (int)edgeMap[(i+1)*dW + (j-1)]; 
+    else                      
+        edge = edge + kern[2*w + 0] * (int)edgeMap[(i+0)*dW + (j-0)]; // extend
+
+    if ((j + 1 < dW) && (i + 1) < dH)
+        edge = edge + kern[2*w + 2] * (int)edgeMap[(i+1)*dW + (j+1)]; 
+    else                     
+        edge = edge + kern[2*w + 2] * (int)edgeMap[(i+0)*dW + (j+0)]; // extend
+    
+
+    // clamp
+    if (edge < 0)
+        edge = 0;
+    
+    if (edge > 31999)
+        edge = 32002;
+
+    if (strncmp(kernel, "blur", 4) == 0) 
+        edge = edge/(4+2+2+1+1+1+1);
+
+    return edge;
 
 }
 
+static void findEdges(char *kern) 
+{
+
+    int kernel[9]; pickKern(kern, kernel);
+    memset(edgeResult, 32002, sizeof(edgeResult));
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            edgeResult[i*dW + j] = convolve(i,j, kernel, kern);
+        }
+    }
+
+}
 /*----------------------------------------------------------------------------*/
 /*                       Python Callbacks                                     */
 /*----------------------------------------------------------------------------*/
@@ -596,6 +707,25 @@ static PyObject *getDepth(PyObject *self, PyObject *args)
 
     memcpy(depthMapClone, depthFullMap, dshmsz);
     return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, depthMapClone);
+}
+
+static PyObject *getDepthColoured(PyObject *self, PyObject *args)
+{
+    npy_intp dims[3] = {dH, dW, 3};
+
+    memcpy(depthCMap, depthFullMap, dshmsz);
+
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
+            depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
+            depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
+
+        }
+    }
+
+    memcpy(depthColouredMapClone, depthColouredMap, hshmsz*3);
+    return PyArray_SimpleNewFromData(3, dims, NPY_UINT8, depthColouredMapClone);
 }
 
 static PyObject *getAccel(PyObject *self, PyObject *args)
@@ -645,22 +775,33 @@ static PyObject *killDepthS(PyObject *self, PyObject *args)
     return Py_None;
 }
 
-/* WORK IN PROGRESS!! */
-static PyObject *getBlob(PyObject *self, PyObject *args)
+static PyObject *getEdges(PyObject *self, PyObject *args)
 {
-    int index;
-    double threshold;
+    char *kern;
+    int repeat;
 
-    if (!PyArg_ParseTuple(args, "id", &index, &threshold))
+    if (!PyArg_ParseTuple(args, "si", &kern, &repeat))
         return NULL;
 
-    index = index + (int)threshold;
-    return Py_BuildValue("i", index);
+
+    npy_intp dims[2] = {dH, dW};
+    memcpy(edgeMap, depthFullMap, dshmsz);
+   
+    for(int i = 0; i < repeat; i++) {
+        findEdges(kern); 
+        memcpy(edgeMap, edgeResult, dshmsz);
+    }
+
+    findEdges(kern);
+    
+    memcpy(edgeResultClone, edgeResult, dshmsz);
+    return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, edgeResultClone);
 }
 
 static PyMethodDef DepthSenseMethods[] = {
     // GET MAPS
     {"getDepthMap",  getDepth, METH_VARARGS, "Get Depth Map"},
+    {"getDepthColouredMap",  getDepthColoured, METH_VARARGS, "Get Depth Coloured Map"},
     {"getColourMap",  getColour, METH_VARARGS, "Get Colour Map"},
     {"getVertices",  getVertex, METH_VARARGS, "Get Vertex Map"},
     {"getUVMap",  getUV, METH_VARARGS, "Get UV Map"},
@@ -670,7 +811,8 @@ static PyMethodDef DepthSenseMethods[] = {
     {"initDepthSense",  initDepthS, METH_VARARGS, "Init DepthSense"},
     {"killDepthSense",  killDepthS, METH_VARARGS, "Kill DepthSense"},
     // PROCESS MAPS
-    {"getBlobAt",  getBlob, METH_VARARGS, "Find blobs in the vertex map at index that are below a certain threshold"},
+    //{"getBlobAt",  getBlob, METH_VARARGS, "Find blob at location in the depth map"},
+    {"getEdges",  getEdges, METH_VARARGS, "Find edges in depth map"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

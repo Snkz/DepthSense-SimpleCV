@@ -15,6 +15,12 @@ while True:
     iY = depthsense.getSync()
     #iY.show()
     
+    iH = depthsense.getDepthColoured()
+    #iH.show() 
+
+    iE = depthsense.getEdges("edgh", 1)
+    #iE.show()
+
     # THESE THREE ARE NOT SIMPLECV IMAGES BY DEFAULT 
     vertex = depthsense.getVertex()
     # vertex map does not get returned as an image as it makes no sense
@@ -27,6 +33,7 @@ while True:
     iU = depthsense.getUV()
 
 
-    iV.sideBySide(iS).show()
+    #iS.sideBySide(iV).show()
     #iD.sideBySide(iY).show()
+    iH.sideBySide(iE).show()
 
