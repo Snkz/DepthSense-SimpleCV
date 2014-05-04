@@ -111,6 +111,12 @@ static uint16_t depthCMap[320*240];
 static uint8_t depthColouredMap[320*240*3];
 static uint8_t depthColouredMapClone[320*240*3];
 
+// internal maps for blob finding
+static uint16_t blobMap[320*240];
+static uint16_t blobResult[320*240];
+static uint16_t blobResultClone[320*240];
+static uint8_t visited[320][240];
+
 // internal maps for edge finding
 static uint16_t edgeMap[320*240];
 static uint16_t edgeResult[320*240];
@@ -594,6 +600,112 @@ static void buildSyncMap()
     }
 }
 
+static bool checkHood(int p_i, int p_j, int base, double thresh_high, double thresh_low, int * pack)
+{
+
+    int depth = blobMap[p_i*dW + p_j];
+    bool push_val = false;
+    
+    if (visited[p_i][p_j] > 3) {
+        // natta 
+        //blobResult[p_i*dW + p_j] = depth;
+    } else if (visited[p_i][p_j] > 2) {
+        // include the value since the neighbours all match
+        // not sure if i should explore but ...
+        if (!((depth < thresh_high + base) &&
+            (depth > base - thresh_low))) {
+            pack[0] = p_i; pack[1] = p_j; pack[2] = base;
+            push_val = true;
+            blobResult[p_i*dW + p_j] = depth;
+        }
+    } else if (visited[p_i][p_j] > 0) {
+        if ((depth < thresh_high + base) &&
+            (depth > base - thresh_low)) {
+            pack[0] = p_i; pack[1] = p_j; pack[2] = depth;
+            push_val = true;
+            blobResult[p_i*dW + p_j] = depth;
+        }
+
+    // init
+    } else if (visited[p_i][p_j] == 0) {
+        if ((depth < thresh_high + base) &&
+            (depth > base - thresh_low)) {
+            pack[0] = p_i; pack[1] = p_j; pack[2] = depth;
+            push_val = true;
+        }
+    }
+
+    return push_val;
+
+}
+
+/* 
+ * Blobs bitch
+ */
+static void findBlob(int sy, int sx, double thresh_high, double thresh_low) 
+{
+
+    list<int *> queue;
+    memset(visited, 0, sizeof(visited));
+    memset(blobResult, 32002, sizeof(blobResult));
+   
+    int *pack = (int *)malloc(sizeof(int) * 3);
+    pack[0] = sy; pack[1] = sx; pack[2] = blobMap[sy*dW + sx];
+
+    // assume it passes the threshold/base requirement, can return here possibly
+    queue.push_back(pack);
+    visited[sy][sx] = 1;
+    blobResult[sy*dW + sx] = blobMap[sy*dW + sx];
+
+    while(!queue.empty()){
+        int * val = queue.front();
+        queue.pop_front();
+        int p_i = val[0];
+        int p_j = val[1];
+        int p_v = val[2];
+
+        // DOWN
+        if (p_i + 1 < dH) {
+            int *dpack = (int *)malloc(sizeof(int) * 3);
+            checkHood(p_i + 1, p_j, p_v, thresh_high, thresh_low, dpack) ?
+                queue.push_back(dpack) : free(dpack);
+
+            visited[p_i + 1][p_j]++;
+        }
+
+
+        // UP
+        if (p_i - 1 > 0) {
+            int *upack = (int *)malloc(sizeof(int) * 3);
+            checkHood(p_i - 1, p_j, p_v, thresh_high, thresh_low, upack) ?
+                queue.push_back(upack) : free(upack);
+
+            visited[p_i - 1][p_j]++;
+        }
+
+        // LEFT
+        if (p_j - 1 > 0) {
+            int *lpack = (int *)malloc(sizeof(int) * 3);
+            checkHood(p_i, p_j - 1, p_v, thresh_high, thresh_low, lpack) ?
+                queue.push_back(lpack) : free(lpack);
+            
+            visited[p_i][p_j - 1]++;
+       }
+
+        // RIGHT
+        if (p_j + 1 < dW) {
+            int *rpack = (int *)malloc(sizeof(int) * 3);
+            checkHood(p_i, p_j + 1, p_v, thresh_high, thresh_low, rpack) ? 
+                queue.push_back(rpack) : free(rpack);
+            
+            visited[p_i][p_j + 1]++;
+        }
+
+        free(val);
+    }
+
+}
+
 static void pickKern(char* kern, int kernel[9]) {
 
     if (strncmp(kern, "edge", 4) == 0) 
@@ -664,6 +776,7 @@ static int convolve(int i, int j, int kern[9], char *kernel) {
         edge = edge + kern[2*w + 2] * (int)edgeMap[(i+0)*dW + (j+0)]; // extend
     
 
+    edge = edge/2 + (32000/2);
     // clamp
     if (edge < 0)
         edge = 0;
@@ -673,6 +786,13 @@ static int convolve(int i, int j, int kern[9], char *kernel) {
 
     if (strncmp(kernel, "blur", 4) == 0) 
         edge = edge/(4+2+2+1+1+1+1);
+
+    //if (strncmp(kernel, "edgh", 4) == 0) {
+    //    if (edge > 1000)
+    //        edge = 31999;
+    //    else
+    //        edge = 0;
+    //} 
 
     return edge;
 
@@ -775,6 +895,24 @@ static PyObject *killDepthS(PyObject *self, PyObject *args)
     return Py_None;
 }
 
+static PyObject *getBlob(PyObject *self, PyObject *args)
+{
+    int i;
+    int j;
+    double thresh_high;
+    double thresh_low;
+
+    if (!PyArg_ParseTuple(args, "iidd", &i, &j,  &thresh_high, &thresh_low))
+        return NULL;
+
+    npy_intp dims[2] = {dH, dW};
+
+    memcpy(blobMap, depthFullMap, dshmsz);
+    findBlob(i, j, thresh_high, thresh_low); 
+    memcpy(blobResultClone, blobResult, dshmsz);
+    return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, blobResultClone);
+}
+
 static PyObject *getEdges(PyObject *self, PyObject *args)
 {
     char *kern;
@@ -787,13 +925,16 @@ static PyObject *getEdges(PyObject *self, PyObject *args)
     npy_intp dims[2] = {dH, dW};
     memcpy(edgeMap, depthFullMap, dshmsz);
    
-    for(int i = 0; i < repeat; i++) {
-        findEdges(kern); 
-        memcpy(edgeMap, edgeResult, dshmsz);
-    }
+    //for(int i = 0; i < repeat; i++) {
+    //    findEdges(kern); 
+    //    memcpy(edgeMap, edgeResult, dshmsz);
+    //}
 
     findEdges(kern);
-    
+    memcpy(edgeMap, edgeResult, dshmsz);
+    findEdges((char*)"edge");
+
+
     memcpy(edgeResultClone, edgeResult, dshmsz);
     return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, edgeResultClone);
 }
@@ -811,7 +952,7 @@ static PyMethodDef DepthSenseMethods[] = {
     {"initDepthSense",  initDepthS, METH_VARARGS, "Init DepthSense"},
     {"killDepthSense",  killDepthS, METH_VARARGS, "Kill DepthSense"},
     // PROCESS MAPS
-    //{"getBlobAt",  getBlob, METH_VARARGS, "Find blob at location in the depth map"},
+    {"getBlobAt",  getBlob, METH_VARARGS, "Find blob at location in the depth map"},
     {"getEdges",  getEdges, METH_VARARGS, "Find edges in depth map"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };

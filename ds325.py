@@ -23,10 +23,25 @@ class DS325:
         return iD.invert()
 
 
+    def getBlob(self, i, j, thresh_high, thresh_low):
+        ''' Return a simple cv compatiable 8bit depth image that contains only 
+        the blob found at index i,j with depth values that are at most 
+        +thresh_high or at least -thresh_low relative to the depth value at 
+        i, j'''
+
+        blob = ds.getBlobAt(i,j, thresh_high, thresh_low)
+        np.clip(blob, 0, 2**10 - 1, blob)
+        blob >>=2
+        blob = blob.astype(np.uint8)
+        iB = Image(blob.transpose())
+        return iB.invert()
+
+
     def getEdges(self, kern, rep):
-        '''Apply the specified kernel to the depth map 
-           kern in ["edge", "edge", "blur", "lapl", "sobx", "soby", "shrp"] 
-        '''
+        ''' Return a simple cv compatiable 8bit depth image that contains only 
+        the blob found at index i,j with depth values that are at most 
+        +thresh_high or at least -thresh_low relative to the depth value at 
+        i, j'''
 
         edge = ds.getEdges(kern, rep)
         np.clip(edge, 0, 2**10 - 1, edge)
@@ -40,14 +55,16 @@ class DS325:
         ''' Return the pure 16bit depth map as a numpy array '''
          
         depth = ds.getDepthMap()
-        iD = (depth.transpose())
+        depth = depth/125
+        iD = Image(depth.transpose())
         return iD
 
     def getEdgesFull(self, kern, rep):
         ''' Return a pure numpy array of highlighted edges in the depthmap ''' 
 
         edge = ds.getEdges(kern, rep)
-        iE = (edge.transpose())
+        edge = edge/125
+        iE = Image(edge.transpose())
         return iE
 
     def getVertex(self):
@@ -67,7 +84,7 @@ class DS325:
         ''' Return a simple cv compatiable 8bit colour image ''' 
 
         depthc = ds.getDepthColouredMap()
-        depthc = depthc[:,:,::-1]
+        #depthc = depthc[:,:,::-1]
         return Image(depthc.transpose([1,0,2]))
 
 
