@@ -7,16 +7,16 @@ while True:
     #iB = depthsense.getBlob(100,100, 5, 5)
 
     #iC = depthsense.getImage()
-    #iD = depthsense.getDepth() 
-    #iE = depthsense.getEdges("edgh", 1)
+    iD = depthsense.getDepth() 
+    iE = depthsense.getConvolvedDepth("lapl", 1)
 
     #iDH = depthsense.getDepthFull()
-    #iEH = depthsense.getEdgesFull("edgh", 1)
+    #iEH = depthsense.getConvolvedDepthFull("edgh", 1)
 
     iH = depthsense.getDepthColoured()
 
-    iH.show()
+    #iH.show()
     #iDH.sideBySide(iEH).show()
-    #iD.sideBySide(iE).show()
+    iD.sideBySide(iE).show()
     #iC.sideBySide(iE).show()
 

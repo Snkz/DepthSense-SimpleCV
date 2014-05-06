@@ -37,19 +37,16 @@ class DS325:
         return iB.invert()
 
 
-    def getEdges(self, kern, rep):
-        ''' Return a simple cv compatiable 8bit depth image that contains only 
-        the blob found at index i,j with depth values that are at most 
-        +thresh_high or at least -thresh_low relative to the depth value at 
-        i, j'''
+    def getConvolvedDepth(self, kern, rep):
+        ''' Return a simple cv compatiable 8bit depth map that has had 
+        the specified kernel applied rep times '''
 
-        edge = ds.getEdges(kern, rep)
-        np.clip(edge, 0, 2**10 - 1, edge)
-        edge >>=2
-        edge = edge.astype(np.uint8)
-        iE = Image(edge.transpose())
+        conv = ds.convolveDepthMap(kern, rep)
+        np.clip(conv, 0, 2**10 - 1, conv)
+        conv >>=2
+        conv = conv.astype(np.uint8)
+        iE = Image(conv.transpose())
         return iE.invert()
-
 
     def getDepthFull(self):
         ''' Return the pure 16bit depth map as a numpy array '''
@@ -59,10 +56,10 @@ class DS325:
         iD = Image(depth.transpose())
         return iD
 
-    def getEdgesFull(self, kern, rep):
-        ''' Return a pure numpy array of highlighted edges in the depthmap ''' 
+    def getConvolvedDepthFull(self, kern, rep):
+        ''' Return a pure numpy array of the convolved in the depthmap ''' 
 
-        edge = ds.getEdges(kern, rep)
+        edge = ds.convolveDepthMap(kern, rep)
         edge = edge/125
         iE = Image(edge.transpose())
         return iE
@@ -85,6 +82,13 @@ class DS325:
         grey = ds.getGreyScaleMap()
         return Image(grey.transpose())
 
+    def getConvolvedImage(self, kern, rep, bias):
+        ''' Return a simple cv compatiable 8bit greyscaled image that has had 
+        the specified kernel applied rep times with bias supplied'''
+
+        conv = ds.convolveColourMap(kern, rep, bias)
+        iE = Image(conv.transpose())
+        return iE.invert()
 
     def getDepthColoured(self):
         ''' Return a simple cv compatiable 8bit colour image ''' 

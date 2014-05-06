@@ -118,15 +118,15 @@ static uint16_t blobResultClone[320*240];
 static uint8_t visited[320][240];
 
 // internal maps for edge finding
-static uint16_t edgeMap[320*240];
-static uint16_t edgeResult[320*240];
-static uint16_t edgeResultClone[320*240];
+static uint16_t dConvolveMap[320*240];
+static uint16_t dConvolveResult[320*240];
+static uint16_t dConvolveResultClone[320*240];
 
 // internal maps for edge finding in colour
 //static uint8_t convolveColourMap[640*480*3];
-//static uint8_t cConvolveMap[640*480];
-//static uint8_t cConvolveResult[640*480];
-//static uint8_t cConvolveResultClone[640*480];
+static uint8_t cConvolveMap[640*480];
+static uint8_t cConvolveResult[640*480];
+static uint8_t cConvolveResultClone[640*480];
 
 // internal maps for edge finding
 static uint8_t greyColourMap[640*480*3];
@@ -739,52 +739,52 @@ static void pickKern(char* kern, int kernel[9]) {
         memcpy(kernel, lapKern, 9*sizeof(int) );
 }
 
-static int convolve(int i, int j, int kern[9], char *kernel, int W, int H) {
+static int convolveDepth(int i, int j, int kern[9], char *kernel, int W, int H) {
     int edge = 0; int w = 3;
-    edge = edge + kern[1*w +1] * (int)edgeMap[i*W + j];
+    edge = edge + kern[1*w +1] * (int)dConvolveMap[i*W + j];
     // UP AND DOWN
     if (i - 1 > 0)
-        edge = edge + kern[0*w + 1] * (int)edgeMap[(i-1)*W + j];
+        edge = edge + kern[0*w + 1] * (int)dConvolveMap[(i-1)*W + j];
     else
-        edge = edge + kern[0*w + 1] * (int)edgeMap[(i-0)*W + j]; // extend
+        edge = edge + kern[0*w + 1] * (int)dConvolveMap[(i-0)*W + j]; // extend
 
     if (i + 1 < H)
-        edge = edge + kern[2*w + 1] * (int)edgeMap[(i+1)*W + j];
+        edge = edge + kern[2*w + 1] * (int)dConvolveMap[(i+1)*W + j];
     else
-        edge = edge + kern[2*w + 1] * (int)edgeMap[(i+0)*W + j]; // extend
+        edge = edge + kern[2*w + 1] * (int)dConvolveMap[(i+0)*W + j]; // extend
 
     // LEFT AND RIGHT
     if (j - 1 > 0)
-        edge = edge + kern[1*w + 0] * (int)edgeMap[i*W + (j-1)]; 
+        edge = edge + kern[1*w + 0] * (int)dConvolveMap[i*W + (j-1)]; 
     else                    
-        edge = edge + kern[1*w + 0] * (int)edgeMap[i*W + (j-0)]; // extend
+        edge = edge + kern[1*w + 0] * (int)dConvolveMap[i*W + (j-0)]; // extend
 
     if (j + 1 < W)         
-        edge = edge + kern[1*w + 2] * (int)edgeMap[i*W + (j+1)]; 
+        edge = edge + kern[1*w + 2] * (int)dConvolveMap[i*W + (j+1)]; 
     else                    
-        edge = edge + kern[1*w + 2] * (int)edgeMap[i*W + (j+0)]; // extend
+        edge = edge + kern[1*w + 2] * (int)dConvolveMap[i*W + (j+0)]; // extend
     
     // UP LEFT AND UP RIGHT
     if ((j - 1 > 0) && (i - 1) > 0)
-        edge = edge + kern[0*w + 0] * (int)edgeMap[(i-1)*W + (j-1)]; 
+        edge = edge + kern[0*w + 0] * (int)dConvolveMap[(i-1)*W + (j-1)]; 
     else                    
-        edge = edge + kern[0*w + 0] * (int)edgeMap[(i-0)*W + (j-0)]; // extend
+        edge = edge + kern[0*w + 0] * (int)dConvolveMap[(i-0)*W + (j-0)]; // extend
 
     if ((j + 1 < W) && (i - 1) > 0)
-        edge = edge + kern[0*w + 2] * (int)edgeMap[(i-1)*W + (j+1)]; 
+        edge = edge + kern[0*w + 2] * (int)dConvolveMap[(i-1)*W + (j+1)]; 
     else                     
-        edge = edge + kern[0*w + 2] * (int)edgeMap[(i-0)*W + (j+0)]; // extend
+        edge = edge + kern[0*w + 2] * (int)dConvolveMap[(i-0)*W + (j+0)]; // extend
     
     // DOWN LEFT AND DOWN RIGHT
     if ((j - 1 > 0) && (i + 1) < H)
-        edge = edge + kern[2*w + 0] * (int)edgeMap[(i+1)*W + (j-1)]; 
+        edge = edge + kern[2*w + 0] * (int)dConvolveMap[(i+1)*W + (j-1)]; 
     else                      
-        edge = edge + kern[2*w + 0] * (int)edgeMap[(i+0)*W + (j-0)]; // extend
+        edge = edge + kern[2*w + 0] * (int)dConvolveMap[(i+0)*W + (j-0)]; // extend
 
     if ((j + 1 < W) && (i + 1) < H)
-        edge = edge + kern[2*w + 2] * (int)edgeMap[(i+1)*W + (j+1)]; 
+        edge = edge + kern[2*w + 2] * (int)dConvolveMap[(i+1)*W + (j+1)]; 
     else                     
-        edge = edge + kern[2*w + 2] * (int)edgeMap[(i+0)*W + (j+0)]; // extend
+        edge = edge + kern[2*w + 2] * (int)dConvolveMap[(i+0)*W + (j+0)]; // extend
     
 
     edge = edge/2 + (32000/2);
@@ -809,22 +809,108 @@ static int convolve(int i, int j, int kern[9], char *kernel, int W, int H) {
 
 }
 
-static void findEdges(char *kern, int W, int H) 
-{
+static int convolveColour(int i, int j, int kern[9], char *kernel, int W, int H, double bias) {
+    int edge = 0; int w = 3;
+    edge = edge + kern[1*w +1] * (int)cConvolveMap[i*W + j];
+    // UP AND DOWN
+    if (i - 1 > 0)
+        edge = edge + kern[0*w + 1] * (int)cConvolveMap[(i-1)*W + j];
+    else
+        edge = edge + kern[0*w + 1] * (int)cConvolveMap[(i-0)*W + j]; // extend
 
+    if (i + 1 < H)
+        edge = edge + kern[2*w + 1] * (int)cConvolveMap[(i+1)*W + j];
+    else
+        edge = edge + kern[2*w + 1] * (int)cConvolveMap[(i+0)*W + j]; // extend
+
+    // LEFT AND RIGHT
+    if (j - 1 > 0)
+        edge = edge + kern[1*w + 0] * (int)cConvolveMap[i*W + (j-1)]; 
+    else                    
+        edge = edge + kern[1*w + 0] * (int)cConvolveMap[i*W + (j-0)]; // extend
+
+    if (j + 1 < W)         
+        edge = edge + kern[1*w + 2] * (int)cConvolveMap[i*W + (j+1)]; 
+    else                    
+        edge = edge + kern[1*w + 2] * (int)cConvolveMap[i*W + (j+0)]; // extend
+    
+    // UP LEFT AND UP RIGHT
+    if ((j - 1 > 0) && (i - 1) > 0)
+        edge = edge + kern[0*w + 0] * (int)cConvolveMap[(i-1)*W + (j-1)]; 
+    else                    
+        edge = edge + kern[0*w + 0] * (int)cConvolveMap[(i-0)*W + (j-0)]; // extend
+
+    if ((j + 1 < W) && (i - 1) > 0)
+        edge = edge + kern[0*w + 2] * (int)cConvolveMap[(i-1)*W + (j+1)]; 
+    else                     
+        edge = edge + kern[0*w + 2] * (int)cConvolveMap[(i-0)*W + (j+0)]; // extend
+    
+    // DOWN LEFT AND DOWN RIGHT
+    if ((j - 1 > 0) && (i + 1) < H)
+        edge = edge + kern[2*w + 0] * (int)cConvolveMap[(i+1)*W + (j-1)]; 
+    else                      
+        edge = edge + kern[2*w + 0] * (int)cConvolveMap[(i+0)*W + (j-0)]; // extend
+
+    if ((j + 1 < W) && (i + 1) < H)
+        edge = edge + kern[2*w + 2] * (int)cConvolveMap[(i+1)*W + (j+1)]; 
+    else                     
+        edge = edge + kern[2*w + 2] * (int)cConvolveMap[(i+0)*W + (j+0)]; // extend
+    
+
+    edge = (edge * (1 - bias)) + (32000 * (bias));
+    // clamp
+    if (edge < 0)
+        edge = 0;
+    
+    if (edge > 31999)
+        edge = 31999;
+
+    if (strncmp(kernel, "blur", 4) == 0) 
+        edge = edge/(4+2+2+1+1+1+1);
+
+    //if (strncmp(kernel, "edgh", 4) == 0) {
+    //    if (edge > 1000)
+    //        edge = 31999;
+    //    else
+    //        edge = 0;
+    //} 
+
+    return edge;
+
+}
+
+static void applyKernelDepth(char *kern, int W, int H) 
+{
     int kernel[9]; pickKern(kern, kernel);
-    memset(edgeResult, 32002, sizeof(edgeResult));
-    for(int i=0; i < dH; i++) {
-        for(int j=0; j < dW; j++) {
-            edgeResult[i*dW + j] = convolve(i,j, kernel, kern, W, H);
+    memset(dConvolveResult, 32002, sizeof(dConvolveResult));
+    for(int i=0; i < H; i++) {
+        for(int j=0; j < W; j++) {
+            dConvolveResult[i*W + j] = convolveDepth(i,j, kernel, kern, W, H);
         }
     }
 
 }
 
+static void applyKernelColour(char *kern, int W, int H, double bias) 
+{
+    int kernel[9]; pickKern(kern, kernel);
+    memset(cConvolveResult, 32002, sizeof(cConvolveResult));
+
+    // saftey
+    if (bias > 1)
+        bias = 0;
+
+    for(int i=0; i < H; i++) {
+        for(int j=0; j < W; j++) {
+            cConvolveResult[i*W + j] = convolveColour(i,j, kernel, kern, W, H, bias);
+        }
+    }
+
+}
+
+
 static void toGreyScale(double rweight, double gweight, double bweight) 
 {
-
     uint8_t red; uint8_t green; uint8_t blue;
     for(int i=0; i < cH; i++) {
         for(int j=0; j < cW; j++) {
@@ -853,6 +939,19 @@ static PyObject *getDepth(PyObject *self, PyObject *args)
 
     memcpy(depthMapClone, depthFullMap, dshmsz);
     return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, depthMapClone);
+}
+
+static PyObject *getGreyScale(PyObject *self, PyObject *args)
+{
+
+    npy_intp dims[2] = {cH, cW};
+
+    memcpy(greyColourMap, colourFullMap, cshmsz*3);
+    memset(greyResult, 0, cshmsz);
+    toGreyScale(0.2126, 0.7152, 0.0722);
+    memcpy(greyResultClone, greyResult, cshmsz);
+
+    return PyArray_SimpleNewFromData(2, dims, NPY_UINT8, greyResultClone);
 }
 
 static PyObject *getDepthColoured(PyObject *self, PyObject *args)
@@ -939,7 +1038,7 @@ static PyObject *getBlob(PyObject *self, PyObject *args)
     return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, blobResultClone);
 }
 
-static PyObject *getEdges(PyObject *self, PyObject *args)
+static PyObject *convolveDepth(PyObject *self, PyObject *args)
 {
     char *kern;
     int repeat;
@@ -947,31 +1046,40 @@ static PyObject *getEdges(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "si", &kern, &repeat))
         return NULL;
 
-
-    npy_intp dims[2] = {dH, dW};
-    memcpy(edgeMap, depthFullMap, dshmsz);
+    memcpy(dConvolveMap, depthFullMap, dshmsz);
    
     for(int i = 0; i < repeat; i++) {
-        findEdges(kern, dW, dH); 
-        memcpy(edgeMap, edgeResult, dshmsz);
+        applyKernelDepth(kern, dW, dH); 
+        memcpy(dConvolveMap, dConvolveResult, dshmsz);
     } 
 
-
-    memcpy(edgeResultClone, edgeResult, dshmsz);
-    return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, edgeResultClone);
+    npy_intp dims[2] = {dH, dW};
+    memcpy(dConvolveResultClone, dConvolveResult, dshmsz);
+    return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, dConvolveResultClone);
 }
 
-static PyObject *getGreyScale(PyObject *self, PyObject *args)
+static PyObject *convolveColour(PyObject *self, PyObject *args)
 {
+    char *kern;
+    int repeat;
+    double bias;
 
-    npy_intp dims[2] = {cH, cW};
+    if (!PyArg_ParseTuple(args, "sid", &kern, &repeat, &bias))
+        return NULL;
 
     memcpy(greyColourMap, colourFullMap, cshmsz*3);
     memset(greyResult, 0, cshmsz);
     toGreyScale(0.2126, 0.7152, 0.0722);
-    memcpy(greyResultClone, greyResult, cshmsz);
+    memcpy(cConvolveMap, greyResult, cshmsz);
+    
+    for(int i = 0; i < repeat; i++) {
+        applyKernelColour(kern, cW, cH, bias); 
+        memcpy(cConvolveMap, cConvolveResult, cshmsz);
+    } 
 
-    return PyArray_SimpleNewFromData(2, dims, NPY_UINT8, greyResultClone);
+    npy_intp dims[2] = {cH, cW};
+    memcpy(cConvolveResultClone, cConvolveResult, cshmsz);
+    return PyArray_SimpleNewFromData(2, dims, NPY_UINT8, cConvolveResultClone);
 }
 
 static PyMethodDef DepthSenseMethods[] = {
@@ -989,7 +1097,8 @@ static PyMethodDef DepthSenseMethods[] = {
     {"killDepthSense",  killDepthS, METH_VARARGS, "Kill DepthSense"},
     // PROCESS MAPS
     {"getBlobAt",  getBlob, METH_VARARGS, "Find blob at location in the depth map"},
-    {"getEdges",  getEdges, METH_VARARGS, "Find edges in depth map"},
+    {"convolveDepthMap",  convolveDepth, METH_VARARGS, "Apply specified kernel to the depth map"},
+    {"convolveColourMap",  convolveColour, METH_VARARGS, "Apply specified kernel to the image"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

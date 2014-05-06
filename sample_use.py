@@ -21,8 +21,11 @@ while True:
     iG = depthsense.getGreyScale()
     #iG.show() 
 
-    iE = depthsense.getEdges("sobx", 1)
+    iE = depthsense.getConvolvedDepth("sobx", 1)
     #iE.show()
+    
+    iC = depthsense.getConvolvedImage("edge", 1, 0)
+    #iC.show()
 
     # THESE THREE ARE NOT SIMPLECV IMAGES BY DEFAULT 
     vertex = depthsense.getVertex()
@@ -37,7 +40,7 @@ while True:
 
 
     #iS.sideBySide(iV).show()
-    iS.sideBySide(iG).show()
+    iC.sideBySide(iG).show()
     #iD.sideBySide(iY).show()
     #iH.sideBySide(iE).show()
 
