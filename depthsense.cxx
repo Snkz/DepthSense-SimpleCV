@@ -158,15 +158,23 @@ static int blurKern[9] = { 1,  2,  1,  // needs to be handled differently
                            2,  4,  2, 
                            1,  2,  1 };
 
-static int sobelYKern[9] = { 1, 0, -1, 
-                             2, 0, -2, 
-                             1, 0, -1 };
+static int sobelYKern[9] = {  1,  2,  1, 
+                              0,  0,  0, 
+                             -1, -2, -1 };
 
 static int sobelXKern[9] = { -1, 0, 1, 
                              -2, 0, 2, 
                              -1, 0, 1 };
 
-static int lapKern[9] = {   1,  -2,   1,  // needs to be handled differently
+static int scharrXKern[9] = {  3, 0, -3 , 
+                              10, 0, -10, 
+                               3, 0, -3  };
+
+static int scharrYKern[9] = {  3,  10,  3, 
+                               0,   0,  0, 
+                              -3, -10, -3  };
+
+static int lapKern[9] = {   1,  -2,   1,  
                            -2,   4,  -2, 
                             1,  -2,   1 };
 
@@ -731,6 +739,10 @@ static void pickKern(char* kern, int kernel[9]) {
         memcpy(kernel, sobelXKern, 9*sizeof(int) );
     if (strncmp(kern, "soby", 4) == 0) 
         memcpy(kernel, sobelYKern, 9*sizeof(int) );
+    if (strncmp(kern, "scrx", 4) == 0) 
+        memcpy(kernel, scharrXKern, 9*sizeof(int) );
+    if (strncmp(kern, "scry", 4) == 0) 
+        memcpy(kernel, scharrYKern, 9*sizeof(int) );
     if (strncmp(kern, "embs", 4) == 0) 
         memcpy(kernel, embossKern, 9*sizeof(int) );
     if (strncmp(kern, "edgh", 4) == 0) 
@@ -788,6 +800,7 @@ static int convolveDepth(int i, int j, int kern[9], char *kernel, int W, int H) 
     
 
     edge = edge/2 + (32000/2);
+    
     // clamp
     if (edge < 0)
         edge = 0;
@@ -797,14 +810,7 @@ static int convolveDepth(int i, int j, int kern[9], char *kernel, int W, int H) 
 
     if (strncmp(kernel, "blur", 4) == 0) 
         edge = edge/(4+2+2+1+1+1+1);
-
-    //if (strncmp(kernel, "edgh", 4) == 0) {
-    //    if (edge > 1000)
-    //        edge = 31999;
-    //    else
-    //        edge = 0;
-    //} 
-
+    
     return edge;
 
 }
@@ -857,7 +863,8 @@ static int convolveColour(int i, int j, int kern[9], char *kernel, int W, int H,
         edge = edge + kern[2*w + 2] * (int)cConvolveMap[(i+0)*W + (j+0)]; // extend
     
 
-    edge = (edge * (1 - bias)) + (32000 * (bias));
+    edge = (edge * ((double)1 - bias)) + ((double)32000 * (bias));
+
     // clamp
     if (edge < 0)
         edge = 0;
@@ -868,12 +875,6 @@ static int convolveColour(int i, int j, int kern[9], char *kernel, int W, int H,
     if (strncmp(kernel, "blur", 4) == 0) 
         edge = edge/(4+2+2+1+1+1+1);
 
-    //if (strncmp(kernel, "edgh", 4) == 0) {
-    //    if (edge > 1000)
-    //        edge = 31999;
-    //    else
-    //        edge = 0;
-    //} 
 
     return edge;
 
@@ -1081,6 +1082,18 @@ static PyObject *convolveColour(PyObject *self, PyObject *args)
     memcpy(cConvolveResultClone, cConvolveResult, cshmsz);
     return PyArray_SimpleNewFromData(2, dims, NPY_UINT8, cConvolveResultClone);
 }
+
+//static PyObject *getNormal(PyObject *self, PyObject *args)
+//{
+//    memcpy(normalMap, vertexFullMap, vshmsz*3);
+//    applyKernel3D(); // applies sobel kernel to each plane 
+//    crossMaps(); // cross product on three planes, store in normalMap result
+//    memcpy(normalMapClone, normalMap, dshmsz);
+//
+//    npy_intp dims[3] = {dH, dW, 3};
+//    memcpy(normalMapResultClone, normalMapResult, dshmsz); 
+//    return PyArray_SimpleNewFromData(3, dims, NPY_UINT16, normalMapResultClone);
+//}
 
 static PyMethodDef DepthSenseMethods[] = {
     // GET MAPS
