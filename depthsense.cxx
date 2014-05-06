@@ -72,15 +72,15 @@ static int32_t dH = 240;
 static int32_t cW = 640;
 static int32_t cH = 480;
 
-int dshmsz = dW*dH*sizeof(uint16_t);
+int dshmsz = dW*dH*sizeof(int16_t);
 int cshmsz = cW*cH*sizeof(uint8_t);
 int vshmsz = dW*dH*sizeof(int16_t);
 int ushmsz = dW*dH*sizeof(float);
 int hshmsz = dW*dH*sizeof(uint8_t);
 
 // shared mem depth maps
-static uint16_t *depthMap;
-static uint16_t *depthFullMap;
+static int16_t *depthMap;
+static int16_t *depthFullMap;
 
 // shared mem depth maps
 static int16_t *vertexMap;
@@ -100,27 +100,27 @@ static float *uvFullMap;
 
 // internal map copies
 static uint8_t colourMapClone[640*480*3];
-static uint16_t depthMapClone[320*240];
+static int16_t depthMapClone[320*240];
 static int16_t vertexMapClone[320*240*3];
 static float accelMapClone[3];
 static float uvMapClone[320*240*2];
 static uint8_t syncMapClone[320*240*3];
 
 // colouring depth map
-static uint16_t depthCMap[320*240];
+static int16_t depthCMap[320*240];
 static uint8_t depthColouredMap[320*240*3];
 static uint8_t depthColouredMapClone[320*240*3];
 
 // internal maps for blob finding
-static uint16_t blobMap[320*240];
-static uint16_t blobResult[320*240];
-static uint16_t blobResultClone[320*240];
+static int16_t blobMap[320*240];
+static int16_t blobResult[320*240];
+static int16_t blobResultClone[320*240];
 static uint8_t visited[320][240];
 
 // internal maps for edge finding
-static uint16_t dConvolveMap[320*240];
-static uint16_t dConvolveResult[320*240];
-static uint16_t dConvolveResultClone[320*240];
+static int16_t dConvolveMap[320*240];
+static int16_t dConvolveResult[320*240];
+static int16_t dConvolveResultClone[320*240];
 
 // internal maps for edge finding in colour
 //static uint8_t convolveColourMap[640*480*3];
@@ -183,8 +183,8 @@ static int lapKern[9] = {   1,  -2,   1,
 int child_pid = 0;
 
 // can't write atomic op but i can atleast do a swap
-static void dptrSwap (uint16_t **pa, uint16_t **pb){
-        uint16_t *temp = *pa;
+static void dptrSwap (int16_t **pa, int16_t **pb){
+        int16_t *temp = *pa;
         *pa = *pb;
         *pb = temp;
 }
@@ -523,8 +523,8 @@ static void * initmap(int sz)
 static void initds()
 {
     // shared mem double buffers
-    depthMap = (uint16_t *) initmap(dshmsz); 
-    depthFullMap = (uint16_t *) initmap(dshmsz); 
+    depthMap = (int16_t *) initmap(dshmsz); 
+    depthFullMap = (int16_t *) initmap(dshmsz); 
 
     accelMap = (float *) initmap(3*sizeof(float)); 
     accelFullMap = (float *) initmap(3*sizeof(float)); 
@@ -939,7 +939,7 @@ static PyObject *getDepth(PyObject *self, PyObject *args)
     npy_intp dims[2] = {dH, dW};
 
     memcpy(depthMapClone, depthFullMap, dshmsz);
-    return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, depthMapClone);
+    return PyArray_SimpleNewFromData(2, dims, NPY_INT16, depthMapClone);
 }
 
 static PyObject *getGreyScale(PyObject *self, PyObject *args)
@@ -1036,7 +1036,7 @@ static PyObject *getBlob(PyObject *self, PyObject *args)
     memcpy(blobMap, depthFullMap, dshmsz);
     findBlob(i, j, thresh_high, thresh_low); 
     memcpy(blobResultClone, blobResult, dshmsz);
-    return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, blobResultClone);
+    return PyArray_SimpleNewFromData(2, dims, NPY_INT16, blobResultClone);
 }
 
 static PyObject *convolveDepth(PyObject *self, PyObject *args)
@@ -1056,7 +1056,7 @@ static PyObject *convolveDepth(PyObject *self, PyObject *args)
 
     npy_intp dims[2] = {dH, dW};
     memcpy(dConvolveResultClone, dConvolveResult, dshmsz);
-    return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, dConvolveResultClone);
+    return PyArray_SimpleNewFromData(2, dims, NPY_INT16, dConvolveResultClone);
 }
 
 static PyObject *convolveColour(PyObject *self, PyObject *args)
@@ -1092,7 +1092,7 @@ static PyObject *convolveColour(PyObject *self, PyObject *args)
 //
 //    npy_intp dims[3] = {dH, dW, 3};
 //    memcpy(normalMapResultClone, normalMapResult, dshmsz); 
-//    return PyArray_SimpleNewFromData(3, dims, NPY_UINT16, normalMapResultClone);
+//    return PyArray_SimpleNewFromData(3, dims, NPY_INT16, normalMapResultClone);
 //}
 
 static PyMethodDef DepthSenseMethods[] = {
