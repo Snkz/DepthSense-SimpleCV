@@ -17,8 +17,11 @@ while True:
     
     iH = depthsense.getDepthColoured()
     #iH.show() 
+    
+    iG = depthsense.getGreyScale()
+    #iG.show() 
 
-    iE = depthsense.getEdges("edgh", 1)
+    iE = depthsense.getEdges("sobx", 1)
     #iE.show()
 
     # THESE THREE ARE NOT SIMPLECV IMAGES BY DEFAULT 
@@ -34,6 +37,7 @@ while True:
 
 
     #iS.sideBySide(iV).show()
+    iS.sideBySide(iG).show()
     #iD.sideBySide(iY).show()
-    iH.sideBySide(iE).show()
+    #iH.sideBySide(iE).show()
 

@@ -79,6 +79,12 @@ class DS325:
         image = image[:,:,::-1]
         return Image(image.transpose([1,0,2]))
 
+    def getGreyScale(self):
+        ''' Return a simple cv compatiable 8bit colour image ''' 
+
+        grey = ds.getGreyScaleMap()
+        return Image(grey.transpose())
+
 
     def getDepthColoured(self):
         ''' Return a simple cv compatiable 8bit colour image ''' 

@@ -122,6 +122,17 @@ static uint16_t edgeMap[320*240];
 static uint16_t edgeResult[320*240];
 static uint16_t edgeResultClone[320*240];
 
+// internal maps for edge finding in colour
+//static uint8_t convolveColourMap[640*480*3];
+//static uint8_t cConvolveMap[640*480];
+//static uint8_t cConvolveResult[640*480];
+//static uint8_t cConvolveResultClone[640*480];
+
+// internal maps for edge finding
+static uint8_t greyColourMap[640*480*3];
+static uint8_t greyResult[640*480];
+static uint8_t greyResultClone[640*480];
+
 // kernels
 static int edgeKern[9] = { 0,  1,  0, 
                            1, -4,  1, 
@@ -728,52 +739,52 @@ static void pickKern(char* kern, int kernel[9]) {
         memcpy(kernel, lapKern, 9*sizeof(int) );
 }
 
-static int convolve(int i, int j, int kern[9], char *kernel) {
+static int convolve(int i, int j, int kern[9], char *kernel, int W, int H) {
     int edge = 0; int w = 3;
-    edge = edge + kern[1*w +1] * (int)edgeMap[i*dW + j];
+    edge = edge + kern[1*w +1] * (int)edgeMap[i*W + j];
     // UP AND DOWN
     if (i - 1 > 0)
-        edge = edge + kern[0*w + 1] * (int)edgeMap[(i-1)*dW + j];
+        edge = edge + kern[0*w + 1] * (int)edgeMap[(i-1)*W + j];
     else
-        edge = edge + kern[0*w + 1] * (int)edgeMap[(i-0)*dW + j]; // extend
+        edge = edge + kern[0*w + 1] * (int)edgeMap[(i-0)*W + j]; // extend
 
-    if (i + 1 < dH)
-        edge = edge + kern[2*w + 1] * (int)edgeMap[(i+1)*dW + j];
+    if (i + 1 < H)
+        edge = edge + kern[2*w + 1] * (int)edgeMap[(i+1)*W + j];
     else
-        edge = edge + kern[2*w + 1] * (int)edgeMap[(i+0)*dW + j]; // extend
+        edge = edge + kern[2*w + 1] * (int)edgeMap[(i+0)*W + j]; // extend
 
     // LEFT AND RIGHT
     if (j - 1 > 0)
-        edge = edge + kern[1*w + 0] * (int)edgeMap[i*dW + (j-1)]; 
+        edge = edge + kern[1*w + 0] * (int)edgeMap[i*W + (j-1)]; 
     else                    
-        edge = edge + kern[1*w + 0] * (int)edgeMap[i*dW + (j-0)]; // extend
+        edge = edge + kern[1*w + 0] * (int)edgeMap[i*W + (j-0)]; // extend
 
-    if (j + 1 < dW)         
-        edge = edge + kern[1*w + 2] * (int)edgeMap[i*dW + (j+1)]; 
+    if (j + 1 < W)         
+        edge = edge + kern[1*w + 2] * (int)edgeMap[i*W + (j+1)]; 
     else                    
-        edge = edge + kern[1*w + 2] * (int)edgeMap[i*dW + (j+0)]; // extend
+        edge = edge + kern[1*w + 2] * (int)edgeMap[i*W + (j+0)]; // extend
     
     // UP LEFT AND UP RIGHT
     if ((j - 1 > 0) && (i - 1) > 0)
-        edge = edge + kern[0*w + 0] * (int)edgeMap[(i-1)*dW + (j-1)]; 
+        edge = edge + kern[0*w + 0] * (int)edgeMap[(i-1)*W + (j-1)]; 
     else                    
-        edge = edge + kern[0*w + 0] * (int)edgeMap[(i-0)*dW + (j-0)]; // extend
+        edge = edge + kern[0*w + 0] * (int)edgeMap[(i-0)*W + (j-0)]; // extend
 
-    if ((j + 1 < dW) && (i - 1) > 0)
-        edge = edge + kern[0*w + 2] * (int)edgeMap[(i-1)*dW + (j+1)]; 
+    if ((j + 1 < W) && (i - 1) > 0)
+        edge = edge + kern[0*w + 2] * (int)edgeMap[(i-1)*W + (j+1)]; 
     else                     
-        edge = edge + kern[0*w + 2] * (int)edgeMap[(i-0)*dW + (j+0)]; // extend
+        edge = edge + kern[0*w + 2] * (int)edgeMap[(i-0)*W + (j+0)]; // extend
     
     // DOWN LEFT AND DOWN RIGHT
-    if ((j - 1 > 0) && (i + 1) < dH)
-        edge = edge + kern[2*w + 0] * (int)edgeMap[(i+1)*dW + (j-1)]; 
+    if ((j - 1 > 0) && (i + 1) < H)
+        edge = edge + kern[2*w + 0] * (int)edgeMap[(i+1)*W + (j-1)]; 
     else                      
-        edge = edge + kern[2*w + 0] * (int)edgeMap[(i+0)*dW + (j-0)]; // extend
+        edge = edge + kern[2*w + 0] * (int)edgeMap[(i+0)*W + (j-0)]; // extend
 
-    if ((j + 1 < dW) && (i + 1) < dH)
-        edge = edge + kern[2*w + 2] * (int)edgeMap[(i+1)*dW + (j+1)]; 
+    if ((j + 1 < W) && (i + 1) < H)
+        edge = edge + kern[2*w + 2] * (int)edgeMap[(i+1)*W + (j+1)]; 
     else                     
-        edge = edge + kern[2*w + 2] * (int)edgeMap[(i+0)*dW + (j+0)]; // extend
+        edge = edge + kern[2*w + 2] * (int)edgeMap[(i+0)*W + (j+0)]; // extend
     
 
     edge = edge/2 + (32000/2);
@@ -782,7 +793,7 @@ static int convolve(int i, int j, int kern[9], char *kernel) {
         edge = 0;
     
     if (edge > 31999)
-        edge = 32002;
+        edge = 31999;
 
     if (strncmp(kernel, "blur", 4) == 0) 
         edge = edge/(4+2+2+1+1+1+1);
@@ -798,18 +809,33 @@ static int convolve(int i, int j, int kern[9], char *kernel) {
 
 }
 
-static void findEdges(char *kern) 
+static void findEdges(char *kern, int W, int H) 
 {
 
     int kernel[9]; pickKern(kern, kernel);
     memset(edgeResult, 32002, sizeof(edgeResult));
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
-            edgeResult[i*dW + j] = convolve(i,j, kernel, kern);
+            edgeResult[i*dW + j] = convolve(i,j, kernel, kern, W, H);
         }
     }
 
 }
+
+static void toGreyScale(double rweight, double gweight, double bweight) 
+{
+
+    uint8_t red; uint8_t green; uint8_t blue;
+    for(int i=0; i < cH; i++) {
+        for(int j=0; j < cW; j++) {
+            red =   greyColourMap[i*cW*3 + j*3 + 0];
+            green = greyColourMap[i*cW*3 + j*3 + 1];
+            blue =  greyColourMap[i*cW*3 + j*3 + 2];
+            greyResult[i*cW + j] = (uint8_t)(red*rweight + green*gweight + blue*bweight);
+        }
+    }
+}
+
 /*----------------------------------------------------------------------------*/
 /*                       Python Callbacks                                     */
 /*----------------------------------------------------------------------------*/
@@ -926,14 +952,26 @@ static PyObject *getEdges(PyObject *self, PyObject *args)
     memcpy(edgeMap, depthFullMap, dshmsz);
    
     for(int i = 0; i < repeat; i++) {
-        findEdges(kern); 
+        findEdges(kern, dW, dH); 
         memcpy(edgeMap, edgeResult, dshmsz);
     } 
 
-    findEdges(kern);
 
     memcpy(edgeResultClone, edgeResult, dshmsz);
     return PyArray_SimpleNewFromData(2, dims, NPY_UINT16, edgeResultClone);
+}
+
+static PyObject *getGreyScale(PyObject *self, PyObject *args)
+{
+
+    npy_intp dims[2] = {cH, cW};
+
+    memcpy(greyColourMap, colourFullMap, cshmsz*3);
+    memset(greyResult, 0, cshmsz);
+    toGreyScale(0.2126, 0.7152, 0.0722);
+    memcpy(greyResultClone, greyResult, cshmsz);
+
+    return PyArray_SimpleNewFromData(2, dims, NPY_UINT8, greyResultClone);
 }
 
 static PyMethodDef DepthSenseMethods[] = {
@@ -941,6 +979,7 @@ static PyMethodDef DepthSenseMethods[] = {
     {"getDepthMap",  getDepth, METH_VARARGS, "Get Depth Map"},
     {"getDepthColouredMap",  getDepthColoured, METH_VARARGS, "Get Depth Coloured Map"},
     {"getColourMap",  getColour, METH_VARARGS, "Get Colour Map"},
+    {"getGreyScaleMap",  getGreyScale, METH_VARARGS, "Get Grey Scale Colour Map"},
     {"getVertices",  getVertex, METH_VARARGS, "Get Vertex Map"},
     {"getUVMap",  getUV, METH_VARARGS, "Get UV Map"},
     {"getSyncMap",  getSync, METH_VARARGS, "Get Colour Overlay Map"},
