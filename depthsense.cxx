@@ -42,8 +42,8 @@
 #include <vector>
 #include <exception>
 #include <iostream>
+#include <fstream>
 #include <list>
-#include<map>
 //#include <thread>
 
 // DepthSense SDK includes
@@ -82,9 +82,13 @@ int hshmsz = dW*dH*sizeof(uint8_t);
 static int16_t *depthMap;
 static int16_t *depthFullMap;
 
-// shared mem depth maps
+// shared mem vertex maps
 static int16_t *vertexMap;
 static int16_t *vertexFullMap;
+
+static float *vertexFMap;
+static float *vertexFFullMap;
+
 
 // shared mem colour maps
 static uint8_t *colourMap;
@@ -104,18 +108,14 @@ static int16_t depthMapClone[320*240];
 static int16_t vertexMapClone[320*240*3];
 static float accelMapClone[3];
 static float uvMapClone[320*240*2];
+static float vertexFMapClone[320*240*3];
 static uint8_t syncMapClone[320*240*3];
+static int16_t printMap[320*240*3];
 
 // colouring depth map
 static int16_t depthCMap[320*240];
 static uint8_t depthColouredMap[320*240*3];
 static uint8_t depthColouredMapClone[320*240*3];
-
-// internal maps for blob finding
-static int16_t blobMap[320*240];
-static int16_t blobResult[320*240];
-static int16_t blobResultClone[320*240];
-static uint8_t visited[320][240];
 
 // internal maps for edge finding
 static int16_t dConvolveMap[320*240];
@@ -123,7 +123,6 @@ static int16_t dConvolveResult[320*240];
 static int16_t dConvolveResultClone[320*240];
 
 // internal maps for edge finding in colour
-//static uint8_t convolveColourMap[640*480*3];
 static uint8_t cConvolveMap[640*480];
 static uint8_t cConvolveResult[640*480];
 static uint8_t cConvolveResultClone[640*480];
@@ -132,6 +131,16 @@ static uint8_t cConvolveResultClone[640*480];
 static uint8_t greyColourMap[640*480*3];
 static uint8_t greyResult[640*480];
 static uint8_t greyResultClone[640*480];
+
+// internal maps for normal computation
+static int16_t normalMap[320*240*3];
+static int16_t dxMap[320*240];
+static int16_t dyMap[320*240];
+static int16_t dzMap[320*240];
+static int16_t diffMap[320*240];
+static int16_t diffResult[320*240];
+static int16_t normalResult[320*240*3];
+static int16_t normalResultClone[320*240*3];
 
 // kernels
 static int edgeKern[9] = { 0,  1,  0, 
@@ -235,17 +244,26 @@ static void onNewDepthSample(DepthNode node, DepthNode::NewSampleReceivedData da
 
     // Verticies
     Vertex vertex;
+    FPVertex fvertex;
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
             vertex = data.vertices[i*dW + j];
+            fvertex = data.verticesFloatingPoint[i*dW + j];
+
             vertexMap[i*dW*3 + j*3 + 0] = vertex.x;
             vertexMap[i*dW*3 + j*3 + 1] = vertex.y;
             vertexMap[i*dW*3 + j*3 + 2] = vertex.z;
+
+            vertexFMap[i*dW*3 + j*3 + 0] = fvertex.x;
+            vertexFMap[i*dW*3 + j*3 + 1] = fvertex.y;
+            vertexFMap[i*dW*3 + j*3 + 2] = fvertex.z;
             //cout << vertex.x << vertex.y << vertex.z << endl;
+            //cout << fvertex.x << fvertex.y << fvertex.z << endl;
 
         }
     }
     vptrSwap(&vertexMap, &vertexFullMap);
+    aptrSwap(&vertexFMap, &vertexFFullMap);
 
     // uv
     UV uv;
@@ -326,6 +344,7 @@ static void configureDepthNode()
 
         g_dnode.setEnableDepthMap(true);
         g_dnode.setEnableVertices(true);
+        g_dnode.setEnableVerticesFloatingPoint(true);
         g_dnode.setEnableAccelerometer(true);
         g_dnode.setEnableUvMap(true);
 
@@ -502,6 +521,9 @@ extern "C" {
             munmap(colourFullMap, cshmsz*3);
             munmap(vertexMap, vshmsz*3);
             munmap(vertexFullMap, vshmsz*3);
+            munmap(vertexFMap, ushmsz*3);
+            munmap(vertexFFullMap, ushmsz*3);
+            munmap(uvMap, ushmsz*2);
             munmap(uvMap, ushmsz*2);
             munmap(uvFullMap, ushmsz*2);
         }
@@ -537,6 +559,10 @@ static void initds()
     
     uvMap = (float *) initmap(ushmsz*2); 
     uvFullMap = (float *) initmap(ushmsz*2); 
+
+    vertexFMap = (float *) initmap(ushmsz*3); 
+    vertexFFullMap = (float *) initmap(ushmsz*3); 
+
 
     // kerns
     child_pid = fork();
@@ -610,119 +636,12 @@ static void buildSyncMap()
                 colz = colourMapClone[ci*cW*3 + cj*3 + 2];
             }
           
-            
             syncMapClone[i*dW*3 + j*3 + 0] = colx;
             syncMapClone[i*dW*3 + j*3 + 1] = coly;
             syncMapClone[i*dW*3 + j*3 + 2] = colz;
 
         }
     }
-}
-
-static bool checkHood(int p_i, int p_j, int base, double thresh_high, double thresh_low, int * pack)
-{
-
-    int depth = blobMap[p_i*dW + p_j];
-    bool push_val = false;
-    
-    if (visited[p_i][p_j] > 3) {
-        // natta 
-        //blobResult[p_i*dW + p_j] = depth;
-    } else if (visited[p_i][p_j] > 2) {
-        // include the value since the neighbours all match
-        // not sure if i should explore but ...
-        if (!((depth < thresh_high + base) &&
-            (depth > base - thresh_low))) {
-            pack[0] = p_i; pack[1] = p_j; pack[2] = base;
-            push_val = true;
-            blobResult[p_i*dW + p_j] = depth;
-        }
-    } else if (visited[p_i][p_j] > 0) {
-        if ((depth < thresh_high + base) &&
-            (depth > base - thresh_low)) {
-            pack[0] = p_i; pack[1] = p_j; pack[2] = depth;
-            push_val = true;
-            blobResult[p_i*dW + p_j] = depth;
-        }
-
-    // init
-    } else if (visited[p_i][p_j] == 0) {
-        if ((depth < thresh_high + base) &&
-            (depth > base - thresh_low)) {
-            pack[0] = p_i; pack[1] = p_j; pack[2] = depth;
-            push_val = true;
-        }
-    }
-
-    return push_val;
-
-}
-
-/* 
- * Blobs bitch
- */
-static void findBlob(int sy, int sx, double thresh_high, double thresh_low) 
-{
-
-    list<int *> queue;
-    memset(visited, 0, sizeof(visited));
-    memset(blobResult, 32002, sizeof(blobResult));
-   
-    int *pack = (int *)malloc(sizeof(int) * 3);
-    pack[0] = sy; pack[1] = sx; pack[2] = blobMap[sy*dW + sx];
-
-    // assume it passes the threshold/base requirement, can return here possibly
-    queue.push_back(pack);
-    visited[sy][sx] = 1;
-    blobResult[sy*dW + sx] = blobMap[sy*dW + sx];
-
-    while(!queue.empty()){
-        int * val = queue.front();
-        queue.pop_front();
-        int p_i = val[0];
-        int p_j = val[1];
-        int p_v = val[2];
-
-        // DOWN
-        if (p_i + 1 < dH) {
-            int *dpack = (int *)malloc(sizeof(int) * 3);
-            checkHood(p_i + 1, p_j, p_v, thresh_high, thresh_low, dpack) ?
-                queue.push_back(dpack) : free(dpack);
-
-            visited[p_i + 1][p_j]++;
-        }
-
-
-        // UP
-        if (p_i - 1 > 0) {
-            int *upack = (int *)malloc(sizeof(int) * 3);
-            checkHood(p_i - 1, p_j, p_v, thresh_high, thresh_low, upack) ?
-                queue.push_back(upack) : free(upack);
-
-            visited[p_i - 1][p_j]++;
-        }
-
-        // LEFT
-        if (p_j - 1 > 0) {
-            int *lpack = (int *)malloc(sizeof(int) * 3);
-            checkHood(p_i, p_j - 1, p_v, thresh_high, thresh_low, lpack) ?
-                queue.push_back(lpack) : free(lpack);
-            
-            visited[p_i][p_j - 1]++;
-       }
-
-        // RIGHT
-        if (p_j + 1 < dW) {
-            int *rpack = (int *)malloc(sizeof(int) * 3);
-            checkHood(p_i, p_j + 1, p_v, thresh_high, thresh_low, rpack) ? 
-                queue.push_back(rpack) : free(rpack);
-            
-            visited[p_i][p_j + 1]++;
-        }
-
-        free(val);
-    }
-
 }
 
 static void pickKern(char* kern, int kernel[9]) {
@@ -751,7 +670,142 @@ static void pickKern(char* kern, int kernel[9]) {
         memcpy(kernel, lapKern, 9*sizeof(int) );
 }
 
-static int convolveDepth(int i, int j, int kern[9], char *kernel, int W, int H) {
+/* TODO:
+ * Three convoloution implementations, must be way to factor this nicely 
+ * (unique array types make it difficult) 
+ */
+
+static int convolve(int i, int j, int kern[9], char *kernel, int W, int H, double bias) {
+    int edge = 0; int w = 3;
+    edge = edge + kern[1*w +1] * (int)diffMap[i*W + j];
+    // UP AND DOWN
+    if (i - 1 > 0)
+        edge = edge + kern[0*w + 1] * (int)diffMap[(i-1)*W + j];
+    else
+        edge = edge + kern[0*w + 1] * (int)diffMap[(i-0)*W + j]; // extend
+
+    if (i + 1 < H)
+        edge = edge + kern[2*w + 1] * (int)diffMap[(i+1)*W + j];
+    else
+        edge = edge + kern[2*w + 1] * (int)diffMap[(i+0)*W + j]; // extend
+
+    // LEFT AND RIGHT
+    if (j - 1 > 0)
+        edge = edge + kern[1*w + 0] * (int)diffMap[i*W + (j-1)]; 
+    else                    
+        edge = edge + kern[1*w + 0] * (int)diffMap[i*W + (j-0)]; // extend
+
+    if (j + 1 < W)         
+        edge = edge + kern[1*w + 2] * (int)diffMap[i*W + (j+1)]; 
+    else                    
+        edge = edge + kern[1*w + 2] * (int)diffMap[i*W + (j+0)]; // extend
+    
+    // UP LEFT AND UP RIGHT
+    if ((j - 1 > 0) && (i - 1) > 0)
+        edge = edge + kern[0*w + 0] * (int)diffMap[(i-1)*W + (j-1)]; 
+    else                    
+        edge = edge + kern[0*w + 0] * (int)diffMap[(i-0)*W + (j-0)]; // extend
+
+    if ((j + 1 < W) && (i - 1) > 0)
+        edge = edge + kern[0*w + 2] * (int)diffMap[(i-1)*W + (j+1)]; 
+    else                     
+        edge = edge + kern[0*w + 2] * (int)diffMap[(i-0)*W + (j+0)]; // extend
+    
+    // DOWN LEFT AND DOWN RIGHT
+    if ((j - 1 > 0) && (i + 1) < H)
+        edge = edge + kern[2*w + 0] * (int)diffMap[(i+1)*W + (j-1)]; 
+    else                      
+        edge = edge + kern[2*w + 0] * (int)diffMap[(i+0)*W + (j-0)]; // extend
+
+    if ((j + 1 < W) && (i + 1) < H)
+        edge = edge + kern[2*w + 2] * (int)diffMap[(i+1)*W + (j+1)]; 
+    else                     
+        edge = edge + kern[2*w + 2] * (int)diffMap[(i+0)*W + (j+0)]; // extend
+    
+    edge = (edge * ((double)1 - bias)) + ((double)32000 * (bias));
+
+    // clamp
+    if (edge < 0)
+        edge = 0;
+    
+    if (edge > 31999)
+        edge = 31999;
+
+    return edge;
+
+}
+
+static void applyKernel3D(char *kern, double bias) 
+{
+    int kernel[9]; pickKern(kern, kernel);
+    memset(diffResult, 32002, dshmsz);
+    
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            diffResult[i*dW + j] = convolve(i,j, kernel, kern, dW, dH, bias);
+        }
+    }
+
+}
+
+static void computeDifferential(char *kern, double bias) 
+{
+    memset(dxMap, 0, dshmsz);
+    memset(dyMap, 0, dshmsz);
+    memset(dzMap, 0, dshmsz);
+
+    (void) kern;
+
+    int16_t x; int16_t y; int16_t z;
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            x = normalMap[i*dW*3 + j*3 + 0];
+            y = normalMap[i*dW*3 + j*3 + 1];
+            z = normalMap[i*dW*3 + j*3 + 2];
+            if (z != 32001) {
+                dxMap[i*dW + j] = x;
+                dyMap[i*dW + j] = y;
+                dzMap[i*dW + j] = z;
+            }
+        }
+    }
+ 
+    // compute dxMap
+    memcpy(diffMap, dzMap, dshmsz);
+    applyKernel3D((char*)"sobx", bias);
+    memcpy(dxMap, diffResult, dshmsz);
+
+    // compute dyMap
+    memcpy(diffMap, dzMap, dshmsz);
+    applyKernel3D((char*)"soby", bias);
+    memcpy(dyMap, diffResult, dshmsz);
+
+    // compute dzMap
+    //memcpy(diffMap, dzMap, dshmsz);
+    //applyKernel3D(kern, bias); 
+    //memcpy(dzMap, diffResult, dshmsz);
+
+    
+}
+
+static void buildNormal() 
+{
+    int16_t x; int16_t y; int16_t z;
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            x = dxMap[i*dW + j];
+            y = dyMap[i*dW + j];
+            z = dzMap[i*dW + j];
+            
+            normalResult[i*dW*3 + j*3 + 0] = (x);
+            normalResult[i*dW*3 + j*3 + 1] = (y);
+            normalResult[i*dW*3 + j*3 + 2] = (255);
+        }
+    }
+}
+
+static int convolveDepth(int i, int j, int kern[9], char *kernel, int W, int H) 
+{
     int edge = 0; int w = 3;
     edge = edge + kern[1*w +1] * (int)dConvolveMap[i*W + j];
     // UP AND DOWN
@@ -797,10 +851,13 @@ static int convolveDepth(int i, int j, int kern[9], char *kernel, int W, int H) 
         edge = edge + kern[2*w + 2] * (int)dConvolveMap[(i+1)*W + (j+1)]; 
     else                     
         edge = edge + kern[2*w + 2] * (int)dConvolveMap[(i+0)*W + (j+0)]; // extend
-    
 
-    edge = edge/2 + (32000/2);
     
+    if (strncmp(kernel, "blur", 4) == 0) 
+        edge = edge/(4+2+2+1+1+1+1);
+    
+    edge = edge/2 + (32000/2);
+
     // clamp
     if (edge < 0)
         edge = 0;
@@ -808,14 +865,12 @@ static int convolveDepth(int i, int j, int kern[9], char *kernel, int W, int H) 
     if (edge > 31999)
         edge = 31999;
 
-    if (strncmp(kernel, "blur", 4) == 0) 
-        edge = edge/(4+2+2+1+1+1+1);
-    
     return edge;
 
 }
 
-static int convolveColour(int i, int j, int kern[9], char *kernel, int W, int H, double bias) {
+static int convolveColour(int i, int j, int kern[9], char *kernel, int W, int H, double bias) 
+{
     int edge = 0; int w = 3;
     edge = edge + kern[1*w +1] * (int)cConvolveMap[i*W + j];
     // UP AND DOWN
@@ -863,6 +918,9 @@ static int convolveColour(int i, int j, int kern[9], char *kernel, int W, int H,
         edge = edge + kern[2*w + 2] * (int)cConvolveMap[(i+0)*W + (j+0)]; // extend
     
 
+    if (strncmp(kernel, "blur", 4) == 0) 
+        edge = edge/(4+2+2+1+1+1+1);
+
     edge = (edge * ((double)1 - bias)) + ((double)32000 * (bias));
 
     // clamp
@@ -871,10 +929,6 @@ static int convolveColour(int i, int j, int kern[9], char *kernel, int W, int H,
     
     if (edge > 31999)
         edge = 31999;
-
-    if (strncmp(kernel, "blur", 4) == 0) 
-        edge = edge/(4+2+2+1+1+1+1);
-
 
     return edge;
 
@@ -895,7 +949,7 @@ static void applyKernelDepth(char *kern, int W, int H)
 static void applyKernelColour(char *kern, int W, int H, double bias) 
 {
     int kernel[9]; pickKern(kern, kernel);
-    memset(cConvolveResult, 32002, sizeof(cConvolveResult));
+    memset(cConvolveResult, 0, sizeof(cConvolveResult));
 
     // saftey
     if (bias > 1)
@@ -921,6 +975,29 @@ static void toGreyScale(double rweight, double gweight, double bweight)
             greyResult[i*cW + j] = (uint8_t)(red*rweight + green*gweight + blue*bweight);
         }
     }
+}
+
+/* TODO: Make this only vertex map */
+static void saveMap(char *map, char* file)
+{
+    (void) map;
+    //TODO: memcpy and loop based on name in map? 
+    ofstream f;
+    f.open(file);
+    cout << "Writing to file: " << file << endl;
+    int16_t x; int16_t y; int16_t z;
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            x = printMap[i*dW*3 + j*3 + 0];
+            y = printMap[i*dW*3 + j*3 + 1];
+            z = printMap[i*dW*3 + j*3 + 2];
+            if (z != 32001)
+                f << x << "," << y << "," << z << endl;
+        }
+    }
+
+    cout << "Complete!" << endl;
+    f.close();
 }
 
 /*----------------------------------------------------------------------------*/
@@ -960,12 +1037,20 @@ static PyObject *getDepthColoured(PyObject *self, PyObject *args)
     npy_intp dims[3] = {dH, dW, 3};
 
     memcpy(depthCMap, depthFullMap, dshmsz);
-
+    uint32_t colour;
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
-            depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
-            depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
-            depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
+            //colour = ((uint32_t)depthCMap[i*dW + j]) * 524; // convert approx 2^15 bits of data to 2^24 bits  
+            colour = 16777216.0*(((double)depthCMap[i*dW + j])/31999.0); // 2^24 * zval/~2^15(zrange)
+            
+            depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) ((colour << (32 - 8*1)) >> (32 - 8));
+            depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) ((colour << (32 - 8*2)) >> (32 - 8));
+            depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) ((colour << (32 - 8*3)) >> (32 - 8));
+
+
+            //depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
+            //depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
+            //depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
 
         }
     }
@@ -989,9 +1074,16 @@ static PyObject *getVertex(PyObject *self, PyObject *args)
     return PyArray_SimpleNewFromData(3, dims, NPY_INT16, vertexMapClone);
 }
 
-static PyObject *getUV(PyObject *self, PyObject *args)
+static PyObject *getVertexFP(PyObject *self, PyObject *args)
 {
     npy_intp dims[3] = {dH, dW, 3};
+    memcpy(vertexFMapClone, vertexFFullMap, ushmsz*3);
+    return PyArray_SimpleNewFromData(3, dims, NPY_FLOAT32, vertexFMapClone);
+}
+
+static PyObject *getUV(PyObject *self, PyObject *args)
+{
+    npy_intp dims[3] = {dH, dW, 2};
     memcpy(uvMapClone, uvFullMap, ushmsz*2);
     return PyArray_SimpleNewFromData(3, dims, NPY_FLOAT32, uvMapClone);
 }
@@ -1021,6 +1113,7 @@ static PyObject *killDepthS(PyObject *self, PyObject *args)
     return Py_None;
 }
 
+/* TODO: Make this actually work, refer to checkHood.cxx */
 static PyObject *getBlob(PyObject *self, PyObject *args)
 {
     int i;
@@ -1033,10 +1126,12 @@ static PyObject *getBlob(PyObject *self, PyObject *args)
 
     npy_intp dims[2] = {dH, dW};
 
-    memcpy(blobMap, depthFullMap, dshmsz);
-    findBlob(i, j, thresh_high, thresh_low); 
-    memcpy(blobResultClone, blobResult, dshmsz);
-    return PyArray_SimpleNewFromData(2, dims, NPY_INT16, blobResultClone);
+    //memcpy(blobMap, depthFullMap, dshmsz);
+    // SHUTDOWN findBlob(i, j, thresh_high, thresh_low); 
+    //memcpy(blobResultClone, blobResult, dshmsz);
+    //return PyArray_SimpleNewFromData(2, dims, NPY_INT16, blobResultClone);
+    Py_RETURN_NONE;
+    
 }
 
 static PyObject *convolveDepth(PyObject *self, PyObject *args)
@@ -1083,17 +1178,35 @@ static PyObject *convolveColour(PyObject *self, PyObject *args)
     return PyArray_SimpleNewFromData(2, dims, NPY_UINT8, cConvolveResultClone);
 }
 
-//static PyObject *getNormal(PyObject *self, PyObject *args)
-//{
-//    memcpy(normalMap, vertexFullMap, vshmsz*3);
-//    applyKernel3D(); // applies sobel kernel to each plane 
-//    crossMaps(); // cross product on three planes, store in normalMap result
-//    memcpy(normalMapClone, normalMap, dshmsz);
-//
-//    npy_intp dims[3] = {dH, dW, 3};
-//    memcpy(normalMapResultClone, normalMapResult, dshmsz); 
-//    return PyArray_SimpleNewFromData(3, dims, NPY_INT16, normalMapResultClone);
-//}
+/* TODO: Make this only vertex map */
+static PyObject *saveMap(PyObject *self, PyObject *args)
+{
+    char *map;
+    char *file;
+
+    if (!PyArg_ParseTuple(args, "ss", &map, &file))
+        return NULL;
+
+    /* TODO: choose if this part can become general or not */
+    memcpy(printMap, vertexFullMap, vshmsz*3);
+    saveMap(map, file);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *getNormal(PyObject *self, PyObject *args)
+{
+    memcpy(normalMap, vertexFullMap, vshmsz*3);
+    double bias = 0;
+    char * kern = (char*)"placeholder";
+    computeDifferential(kern, bias); // applies sobel kernel to each plane 
+    //crossMaps(); // cross product on three planes, store in normalMap result
+    buildNormal(); // code will become cross normal soon
+
+    npy_intp dims[3] = {dH, dW, 3};
+    memcpy(normalResultClone, normalResult, dshmsz*3); 
+    return PyArray_SimpleNewFromData(3, dims, NPY_INT16, normalResultClone);
+}
 
 static PyMethodDef DepthSenseMethods[] = {
     // GET MAPS
@@ -1102,6 +1215,8 @@ static PyMethodDef DepthSenseMethods[] = {
     {"getColourMap",  getColour, METH_VARARGS, "Get Colour Map"},
     {"getGreyScaleMap",  getGreyScale, METH_VARARGS, "Get Grey Scale Colour Map"},
     {"getVertices",  getVertex, METH_VARARGS, "Get Vertex Map"},
+    {"getVerticesFP",  getVertexFP, METH_VARARGS, "Get Floating Point Vertex Map"},
+    {"getNormalMap",  getNormal, METH_VARARGS, "Get Normal Map"},
     {"getUVMap",  getUV, METH_VARARGS, "Get UV Map"},
     {"getSyncMap",  getSync, METH_VARARGS, "Get Colour Overlay Map"},
     {"getAcceleration",  getAccel, METH_VARARGS, "Get Acceleration"},
@@ -1112,6 +1227,8 @@ static PyMethodDef DepthSenseMethods[] = {
     {"getBlobAt",  getBlob, METH_VARARGS, "Find blob at location in the depth map"},
     {"convolveDepthMap",  convolveDepth, METH_VARARGS, "Apply specified kernel to the depth map"},
     {"convolveColourMap",  convolveColour, METH_VARARGS, "Apply specified kernel to the image"},
+    // SAVE MAPS
+    {"saveMap",  saveMap, METH_VARARGS, "Save the specified map"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

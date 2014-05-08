@@ -21,6 +21,9 @@ while True:
     iG = depthsense.getGreyScale()
     #iG.show() 
 
+    iN = depthsense.getNormal()
+    #iN.show() 
+
     iE = depthsense.getConvolvedDepth("sobx", 1)
     #iE.show()
     
@@ -34,14 +37,19 @@ while True:
     iV = Image(vertex.transpose([1,0,2]))
     #iV.show()
 
+    vertexFP = depthsense.getVertexFP()
+    # vertex map does not get returned as an image as it makes no sense
+    iP = Image(vertexFP.transpose([1,0,2]))
+
     # accel is not returned as a simplecv image
     iA = depthsense.getAcceleration()
     # uv map is not returned as a simplecv image
     iU = depthsense.getUV()
 
-
+    #depthsense.saveMap("vertex", "vertex.asc");
     #iS.sideBySide(iV).show()
-    iC.sideBySide(iCC).show()
+    #iC.sideBySide(iCC).show()
     #iD.sideBySide(iY).show()
     #iH.sideBySide(iE).show()
+    iN.sideBySide(iP).show()
 
