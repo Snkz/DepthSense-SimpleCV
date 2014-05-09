@@ -1102,7 +1102,7 @@ static PyObject *saveMap(PyObject *self, PyObject *args)
 static PyObject *getNormal(PyObject *self, PyObject *args)
 {
     memcpy(normalMap, vertexFullMap, vshmsz*3);
-    double bias = 0;
+    double bias = 0.5;
     char * kern = (char*)"placeholder";
     computeDifferential(kern, bias); // applies sobel kernel to each plane 
     //crossMaps(); // cross product on three planes, store in normalMap result
