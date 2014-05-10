@@ -24,7 +24,7 @@ while True:
     iN = depthsense.getNormal()
     #iN.show() 
 
-    iE = depthsense.getConvolvedDepth("sobx", 1)
+    iE = depthsense.getConvolvedDepth("sobx", 1, 0.5)
     #iE.show()
     
     iC = depthsense.getConvolvedImage("scry", 1, 0.0)

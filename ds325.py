@@ -52,11 +52,11 @@ class DS325:
         #return iB.invert()
 
 
-    def getConvolvedDepth(self, kern, rep):
+    def getConvolvedDepth(self, kern, rep, bias):
         ''' Return a simple cv compatiable 8bit depth map that has had 
         the specified kernel applied rep times '''
 
-        conv = ds.convolveDepthMap(kern, rep)
+        conv = ds.convolveDepthMap(kern, rep, bias)
         np.clip(conv, 0, 2**10 - 1, conv)
         conv >>=2
         conv = conv.astype(np.uint8)
@@ -71,10 +71,10 @@ class DS325:
         iD = Image(depth.transpose())
         return iD
 
-    def getConvolvedDepthFull(self, kern, rep):
+    def getConvolvedDepthFull(self, kern, rep, bias):
         ''' Return a pure numpy array of the convolved in the depthmap ''' 
 
-        edge = ds.convolveDepthMap(kern, rep)
+        edge = ds.convolveDepthMap(kern, rep, bias)
         edge = edge/125
         iE = Image(edge.transpose())
         return iE
