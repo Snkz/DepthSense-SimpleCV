@@ -1,0 +1,1 @@
+g++ depthsense.cxx imageproccessing.cxx -I '/opt/softkinetic/DepthSenseSDK/include'  -L '/opt/softkinetic/DepthSenseSDK/lib' -lturbojpeg -lDepthSensePlugins -lDepthSense -lpython2.7 -o depth
