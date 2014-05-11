@@ -503,14 +503,22 @@ static void saveMap(char *map, char* file)
     ofstream f;
     f.open(file);
     cout << "Writing to file: " << file << endl;
-    int16_t x; int16_t y; int16_t z;
+    int16_t vx; int16_t vy; int16_t vz;
+    int16_t nx; int16_t ny; int16_t nz;
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
-            x = printMap[i*dW*3 + j*3 + 0];
-            y = printMap[i*dW*3 + j*3 + 1];
-            z = printMap[i*dW*3 + j*3 + 2];
-            if (z != 32001)
-                f << x << "," << y << "," << z << endl;
+            nx = nPrintMap[i*dW*3 + j*3 + 0];
+            ny = nPrintMap[i*dW*3 + j*3 + 1];
+            nz = nPrintMap[i*dW*3 + j*3 + 2];
+
+            vx = vPrintMap[i*dW*3 + j*3 + 0];
+            vy = vPrintMap[i*dW*3 + j*3 + 1];
+            vz = vPrintMap[i*dW*3 + j*3 + 2];
+
+            if (vz != 32001) {
+                f << vx << "," << vy << "," << vz << endl;
+                f << nx << "," << ny << "," << nz << endl;
+            }
         }
     }
 
@@ -556,19 +564,20 @@ static PyObject *getDepthColoured(PyObject *self, PyObject *args)
     npy_intp dims[3] = {dH, dW, 3};
 
     memcpy(depthCMap, depthFullMap, dshmsz);
-    uint32_t colour;
+    memset(depthColouredMap, 0, hshmsz*3);
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
             //colour = ((uint32_t)depthCMap[i*dW + j]) * 524; // convert approx 2^15 bits of data to 2^24 bits  
-            colour = 16777216.0*(((double)depthCMap[i*dW + j])/31999.0); // 2^24 * zval/~2^15(zrange)
-            
-            depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) ((colour << (32 - 8*1)) >> (32 - 8));
-            depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) ((colour << (32 - 8*2)) >> (32 - 8));
-            depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) ((colour << (32 - 8*3)) >> (32 - 8));
+            //colour = 16777216.0*(((double)depthCMap[i*dW + j])/31999.0); // 2^24 * zval/~2^15(zrange)
+            //cout << depth << " " << depthCMap[i*dW + j] << endl;
 
-            //depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
-            //depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
-            //depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
+            //depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) ((colour << (32 - 8*1)) >> (32 - 8));
+            //depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) ((colour << (32 - 8*2)) >> (32 - 8));
+            //depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) ((colour << (32 - 8*3)) >> (32 - 8));
+
+            depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
+            depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
+            depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
 
         }
     }
@@ -707,7 +716,8 @@ static PyObject *saveMap(PyObject *self, PyObject *args)
         return NULL;
 
     /* TODO: choose if this part can become general or not */
-    memcpy(printMap, vertexFullMap, vshmsz*3);
+    memcpy(vPrintMap, vertexFullMap, vshmsz*3);
+    memcpy(nPrintMap, normalResult, dshmsz*3); 
     saveMap(map, file);
 
     Py_RETURN_NONE;

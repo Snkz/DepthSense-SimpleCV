@@ -24,7 +24,7 @@ while True:
     iN = depthsense.getNormal()
     #iN.show() 
 
-    iE = depthsense.getConvolvedDepth("sobx", 1, 0.5)
+    iE = depthsense.getConvolvedDepth("sobx", 1, 0.0)
     #iE.show()
     
     iC = depthsense.getConvolvedImage("scry", 1, 0.0)
@@ -51,5 +51,5 @@ while True:
     #iC.sideBySide(iCC).show()
     #iD.sideBySide(iY).show()
     #iH.sideBySide(iE).show()
-    iN.sideBySide(iP).show()
+    iN.sideBySide(iE).show()
 

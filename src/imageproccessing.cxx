@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 // C++ includes
 #include <exception>
@@ -69,53 +70,53 @@ void pickKern(char* kern, int kernel[9])
  * Three convoloution implementations, must be way to factor this nicely 
  * (unique array types make it difficult) 
  */
-int convolve(int i, int j, int kern[9], char *kernel, int W, int H, double bias) 
+int convolve(int i, int j, int kern[9], char *kernel, int W, int H, double bias, int jump) 
 {
     int edge = 0; int w = 3;
-    edge = edge + kern[1*w +1] * (int)diffMap[i*W + j];
+    edge = edge + kern[1*w +1] * (int)diffMap[i*W*3 + j*3 + jump];
     // UP AND DOWN
     if (i - 1 > 0)
-        edge = edge + kern[0*w + 1] * (int)diffMap[(i-1)*W + j];
+        edge = edge + kern[0*w + 1] * (int)diffMap[(i-1)*W*3 + j*3 + jump];
     else
-        edge = edge + kern[0*w + 1] * (int)diffMap[(i-0)*W + j]; // extend
+        edge = edge + kern[0*w + 1] * (int)diffMap[(i-0)*W*3 + j*3 + jump]; // extend
 
     if (i + 1 < H)
-        edge = edge + kern[2*w + 1] * (int)diffMap[(i+1)*W + j];
+        edge = edge + kern[2*w + 1] * (int)diffMap[(i+1)*W*3 + j*3 + jump];
     else
-        edge = edge + kern[2*w + 1] * (int)diffMap[(i+0)*W + j]; // extend
+        edge = edge + kern[2*w + 1] * (int)diffMap[(i+0)*W*3 + j*3 + jump]; // extend
 
     // LEFT AND RIGHT
     if (j - 1 > 0)
-        edge = edge + kern[1*w + 0] * (int)diffMap[i*W + (j-1)]; 
+        edge = edge + kern[1*w + 0] * (int)diffMap[i*W*3 + (j-1)*3 + jump]; 
     else                    
-        edge = edge + kern[1*w + 0] * (int)diffMap[i*W + (j-0)]; // extend
+        edge = edge + kern[1*w + 0] * (int)diffMap[i*W*3 + (j-0)*3 + jump]; // extend
 
     if (j + 1 < W)         
-        edge = edge + kern[1*w + 2] * (int)diffMap[i*W + (j+1)]; 
+        edge = edge + kern[1*w + 2] * (int)diffMap[i*W*3 + (j+1)*3 + jump]; 
     else                    
-        edge = edge + kern[1*w + 2] * (int)diffMap[i*W + (j+0)]; // extend
+        edge = edge + kern[1*w + 2] * (int)diffMap[i*W*3 + (j+0)*3 + jump]; // extend
     
     // UP LEFT AND UP RIGHT
     if ((j - 1 > 0) && (i - 1) > 0)
-        edge = edge + kern[0*w + 0] * (int)diffMap[(i-1)*W + (j-1)]; 
+        edge = edge + kern[0*w + 0] * (int)diffMap[(i-1)*W*3 + (j-1)*3 + jump]; 
     else                    
-        edge = edge + kern[0*w + 0] * (int)diffMap[(i-0)*W + (j-0)]; // extend
+        edge = edge + kern[0*w + 0] * (int)diffMap[(i-0)*W*3 + (j-0)*3 + jump]; // extend
 
     if ((j + 1 < W) && (i - 1) > 0)
-        edge = edge + kern[0*w + 2] * (int)diffMap[(i-1)*W + (j+1)]; 
+        edge = edge + kern[0*w + 2] * (int)diffMap[(i-1)*W*3 + (j+1)*3 + jump]; 
     else                     
-        edge = edge + kern[0*w + 2] * (int)diffMap[(i-0)*W + (j+0)]; // extend
+        edge = edge + kern[0*w + 2] * (int)diffMap[(i-0)*W*3 + (j+0)*3 + jump]; // extend
     
     // DOWN LEFT AND DOWN RIGHT
     if ((j - 1 > 0) && (i + 1) < H)
-        edge = edge + kern[2*w + 0] * (int)diffMap[(i+1)*W + (j-1)]; 
+        edge = edge + kern[2*w + 0] * (int)diffMap[(i+1)*W*3 + (j-1)*3 + jump]; 
     else                      
-        edge = edge + kern[2*w + 0] * (int)diffMap[(i+0)*W + (j-0)]; // extend
+        edge = edge + kern[2*w + 0] * (int)diffMap[(i+0)*W*3 + (j-0)*3 + jump]; // extend
 
     if ((j + 1 < W) && (i + 1) < H)
-        edge = edge + kern[2*w + 2] * (int)diffMap[(i+1)*W + (j+1)]; 
+        edge = edge + kern[2*w + 2] * (int)diffMap[(i+1)*W*3 + (j+1)*3 + jump]; 
     else                     
-        edge = edge + kern[2*w + 2] * (int)diffMap[(i+0)*W + (j+0)]; // extend
+        edge = edge + kern[2*w + 2] * (int)diffMap[(i+0)*W*3 + (j+0)*3 + jump]; // extend
     
     edge = (edge * ((double)1 - bias)) + ((double)32000 * (bias));
 
@@ -300,7 +301,9 @@ void applyKernel3D(char *kern, int W, int H, double bias)
     
     for(int i=0; i < H; i++) {
         for(int j=0; j < W; j++) {
-            diffResult[i*W + j] = convolve(i,j, kernel, kern, W, H, bias);
+            diffResult[i*W*3 + j*3 + 0] = convolve(i,j, kernel, kern, W, H, bias, 0);
+            diffResult[i*W*3 + j*3 + 1] = convolve(i,j, kernel, kern, W, H, bias, 1);
+            diffResult[i*W*3 + j*3 + 2] = convolve(i,j, kernel, kern, W, H, bias, 2);
         }
     }
 
@@ -313,38 +316,18 @@ void computeDifferential(char *kern, double bias)
 {
     memset(dxMap, 0, dshmsz);
     memset(dyMap, 0, dshmsz);
-    memset(dzMap, 0, dshmsz);
+    memcpy(diffMap, normalMap, dshmsz*3);
 
     (void) kern;
 
-    int16_t x; int16_t y; int16_t z;
-    for(int i=0; i < dH; i++) {
-        for(int j=0; j < dW; j++) {
-            x = normalMap[i*dW*3 + j*3 + 0];
-            y = normalMap[i*dW*3 + j*3 + 1];
-            z = normalMap[i*dW*3 + j*3 + 2];
-            if (z != 32001) {
-                dxMap[i*dW + j] = x;
-                dyMap[i*dW + j] = y;
-                dzMap[i*dW + j] = z;
-            }
-        }
-    }
- 
     // compute dxMap
-    memcpy(diffMap, dzMap, dshmsz);
     applyKernel3D((char*)"sobx", dW, dH, bias);
-    memcpy(dxMap, diffResult, dshmsz);
+    memcpy(dxMap, diffResult, dshmsz*3);
 
     // compute dyMap
-    memcpy(diffMap, dzMap, dshmsz);
     applyKernel3D((char*)"soby", dW, dH, bias);
-    memcpy(dyMap, diffResult, dshmsz);
+    memcpy(dyMap, diffResult, dshmsz*3);
 
-    // compute dzMap
-    //memcpy(diffMap, dzMap, dshmsz);
-    //applyKernel3D(kern, dW, dH, bias); 
-    //memcpy(dzMap, diffResult, dshmsz);
 }
 
 /*
@@ -352,16 +335,30 @@ void computeDifferential(char *kern, double bias)
  */
 void crossMaps() 
 {
-    int16_t x; int16_t y; int16_t z;
+    int16_t dxx; int16_t dxy; int16_t dxz; 
+    int16_t dyx; int16_t dyy; int16_t dyz; 
+
+    double nx; double ny; double nz; 
+    double length;
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
-            x = dxMap[i*dW + j];
-            y = dyMap[i*dW + j];
-            z = dzMap[i*dW + j];
-            
-            normalResult[i*dW*3 + j*3 + 0] = (x);
-            normalResult[i*dW*3 + j*3 + 1] = (y);
-            normalResult[i*dW*3 + j*3 + 2] = (255);
+            dxx = dxMap[i*dW*3 + j*3 + 0];
+            dxy = dxMap[i*dW*3 + j*3 + 1];
+            dxz = dxMap[i*dW*3 + j*3 + 2];
+
+            dyx = dyMap[i*dW*3 + j*3 + 0];
+            dyy = dyMap[i*dW*3 + j*3 + 1];
+            dyz = dyMap[i*dW*3 + j*3 + 2];
+           
+            nx = dxy*dyz - dxz*dyy; 
+            ny = dxz*dyx - dxx*dyz;
+            nz = dxx*dyy - dxy*dyx;
+
+            length = sqrt(nx*nx + ny*ny + nz*nz);
+
+            normalResult[i*dW*3 + j*3 + 0] = nx/length * 65535;
+            normalResult[i*dW*3 + j*3 + 1] = ny/length * 65535;
+            normalResult[i*dW*3 + j*3 + 2] = nz/length * 65535;
         }
     }
 }
@@ -418,7 +415,5 @@ void buildSyncMap()
         }
     }
 }
-
-
 
 

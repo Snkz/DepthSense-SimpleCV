@@ -55,7 +55,8 @@ extern float accelMapClone[3];
 extern float uvMapClone[320*240*2];
 extern float vertexFMapClone[320*240*3];
 extern uint8_t syncMapClone[320*240*3];
-extern int16_t printMap[320*240*3];
+extern int16_t nPrintMap[320*240*3];
+extern int16_t vPrintMap[320*240*3];
 
 // colouring depth map
 extern int16_t depthCMap[320*240];
@@ -79,10 +80,9 @@ extern uint8_t greyResultClone[640*480];
 
 // internal maps for normal computation
 extern int16_t normalMap[320*240*3];
-extern int16_t dxMap[320*240];
-extern int16_t dyMap[320*240];
-extern int16_t dzMap[320*240];
-extern int16_t diffMap[320*240];
-extern int16_t diffResult[320*240];
+extern int16_t dxMap[320*240*3];
+extern int16_t dyMap[320*240*3];
+extern int16_t diffMap[320*240*3];
+extern int16_t diffResult[320*240*3];
 extern int16_t normalResult[320*240*3];
 extern int16_t normalResultClone[320*240*3];
