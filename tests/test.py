@@ -10,7 +10,7 @@ def listen():
     while True:
         data = sys.stdin.readline()
         if "save" in data:
-            depthsense.saveMap("vertex", "vertex_data.asc")
+            depthsense.saveMap("all", "all_data.asc")
 
 
 # dum
@@ -36,5 +36,6 @@ while True:
     #iC.sideBySide(iE).show()
     vertex = depthsense.getVertex()
     iV = Image(vertex.transpose([1,0,2]))
-    iV.show()
+    iN = depthsense.getNormal()
+    iV.sideBySide(iN).show()
 

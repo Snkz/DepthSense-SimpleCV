@@ -28,7 +28,7 @@ while True:
     #iE.show()
     
     iC = depthsense.getConvolvedImage("scry", 1, 0.0)
-    iCC = depthsense.getConvolvedImage("scrx", 1, 0.0)
+    #iCC = depthsense.getConvolvedImage("scrx", 1, 0.0)
     #iC.show()
 
     # THESE THREE ARE NOT SIMPLECV IMAGES BY DEFAULT 
@@ -48,7 +48,7 @@ while True:
 
     #depthsense.saveMap("vertex", "vertex.asc");
     #iS.sideBySide(iV).show()
-    #iC.sideBySide(iCC).show()
+    #iC.sideBySide(iG).show()
     #iD.sideBySide(iY).show()
     #iH.sideBySide(iE).show()
     iN.sideBySide(iE).show()
