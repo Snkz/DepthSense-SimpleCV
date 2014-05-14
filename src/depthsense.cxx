@@ -57,10 +57,11 @@ int16_t normalResultClone[320*240*3];
 
 using namespace std;
 
-/* TODO: Make this only vertex map */
+// Minor processing (kind of hard to move)
 static void saveMap(char *map, char* file)
 {
     (void) map;
+    //TODO: Make this a not shitty and specific function
     //TODO: memcpy and loop based on name in map? 
     ofstream f;
     f.open(file);
@@ -88,6 +89,62 @@ static void saveMap(char *map, char* file)
     f.close();
 }
 
+void buildSyncMap()
+{
+    int ci, cj;
+    uint8_t colx;
+    uint8_t coly;
+    uint8_t colz;
+    float uvx;
+    float uvy;
+
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            uvx = uvMapClone[i*dW*2 + j*2 + 0];    
+            uvy = uvMapClone[i*dW*2 + j*2 + 1];    
+            colx = 0;
+            coly = 0;
+            colz = 0;
+            
+            if((uvx > 0 && uvx < 1 && uvy > 0 && uvy < 1) && 
+                (depthMapClone[i*dW + j] < 32000)){
+                ci = (int) (uvy * ((float) cH));
+                cj = (int) (uvx * ((float) cW));
+                colx = colourMapClone[ci*cW*3 + cj*3 + 0];
+                coly = colourMapClone[ci*cW*3 + cj*3 + 1];
+                colz = colourMapClone[ci*cW*3 + cj*3 + 2];
+            }
+          
+            syncMapClone[i*dW*3 + j*3 + 0] = colx;
+            syncMapClone[i*dW*3 + j*3 + 1] = coly;
+            syncMapClone[i*dW*3 + j*3 + 2] = colz;
+
+        }
+    }
+}
+
+void buildDepthColoured() 
+{
+    for(int i=0; i < dH; i++) {
+        for(int j=0; j < dW; j++) {
+            //TODO: Make this not complete shit
+            //colour = ((uint32_t)depthCMap[i*dW + j]) * 524; // convert approx 2^15 bits of data to 2^24 bits  
+            //colour = 16777216.0*(((double)depthCMap[i*dW + j])/31999.0); // 2^24 * zval/~2^15(zrange)
+            //cout << depth << " " << depthCMap[i*dW + j] << endl;
+
+            //depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) ((colour << (32 - 8*1)) >> (32 - 8));
+            //depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) ((colour << (32 - 8*2)) >> (32 - 8));
+            //depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) ((colour << (32 - 8*3)) >> (32 - 8));
+
+            depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
+            depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
+            depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
+
+        }
+    }
+}
+
+// Python Callbacks
 static PyObject *getColour(PyObject *self, PyObject *args)
 {
     npy_intp dims[3] = {cH, cW, 3};
@@ -124,24 +181,7 @@ static PyObject *getDepthColoured(PyObject *self, PyObject *args)
 
     memcpy(depthCMap, depthFullMap, dshmsz);
     memset(depthColouredMap, 0, hshmsz*3);
-    for(int i=0; i < dH; i++) {
-        for(int j=0; j < dW; j++) {
-            //colour = ((uint32_t)depthCMap[i*dW + j]) * 524; // convert approx 2^15 bits of data to 2^24 bits  
-            //colour = 16777216.0*(((double)depthCMap[i*dW + j])/31999.0); // 2^24 * zval/~2^15(zrange)
-            //cout << depth << " " << depthCMap[i*dW + j] << endl;
-
-            //depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) ((colour << (32 - 8*1)) >> (32 - 8));
-            //depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) ((colour << (32 - 8*2)) >> (32 - 8));
-            //depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) ((colour << (32 - 8*3)) >> (32 - 8));
-
-            depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
-            depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
-            depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
-
-        }
-    }
-
-    memcpy(depthColouredMapClone, depthColouredMap, hshmsz*3);
+        memcpy(depthColouredMapClone, depthColouredMap, hshmsz*3);
     return PyArray_SimpleNewFromData(3, dims, NPY_UINT8, depthColouredMapClone);
 }
 
@@ -187,13 +227,13 @@ static PyObject *getSync(PyObject *self, PyObject *args)
 }
 
 
-static PyObject *initDepthS(PyObject *self, PyObject *args)
+static PyObject *initDS(PyObject *self, PyObject *args)
 {
     initds();
     return Py_None;
 }
 
-static PyObject *killDepthS(PyObject *self, PyObject *args)
+static PyObject *killDS(PyObject *self, PyObject *args)
 {
     killds();
     return Py_None;
@@ -308,8 +348,8 @@ static PyMethodDef DepthSenseMethods[] = {
     {"getSyncMap",  getSync, METH_VARARGS, "Get Colour Overlay Map"},
     {"getAcceleration",  getAccel, METH_VARARGS, "Get Acceleration"},
     // CREATE MODULE
-    {"initDepthSense",  initDepthS, METH_VARARGS, "Init DepthSense"},
-    {"killDepthSense",  killDepthS, METH_VARARGS, "Kill DepthSense"},
+    {"initDepthSense",  initDS, METH_VARARGS, "Init DepthSense"},
+    {"killDepthSense",  killDS, METH_VARARGS, "Kill DepthSense"},
     // PROCESS MAPS
     {"getBlobAt",  getBlob, METH_VARARGS, "Find blob at location in the depth map"},
     {"convolveDepthMap",  convolveDepth, METH_VARARGS, "Apply specified kernel to the depth map"},

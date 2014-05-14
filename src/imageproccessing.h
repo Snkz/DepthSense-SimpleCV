@@ -102,6 +102,6 @@ void toGreyScale(double rweight, double gweight, double bweight);
  * with the resoloution of the depth map with pixels that exist in both the 
  * depth and colour map exclusively (that info is provided by the uv map)
  */
-void buildSyncMap(void);
+//void buildSyncMap(void);
 
 
