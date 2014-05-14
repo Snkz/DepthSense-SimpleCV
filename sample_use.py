@@ -14,21 +14,19 @@ while True:
 
     iY = depthsense.getSync()
     #iY.show()
-    
+   
+    # in beta
     iH = depthsense.getDepthColoured()
     #iH.show() 
     
     iG = depthsense.getGreyScale()
     #iG.show() 
 
-    iN = depthsense.getNormal()
-    #iN.show() 
-
     iE = depthsense.getConvolvedDepth("sobx", 1, 0.0)
     #iE.show()
     
     iC = depthsense.getConvolvedImage("scry", 1, 0.0)
-    #iCC = depthsense.getConvolvedImage("scrx", 1, 0.0)
+    iCC = depthsense.getConvolvedImage("scrx", 1, 0.0)
     #iC.show()
 
     # THESE THREE ARE NOT SIMPLECV IMAGES BY DEFAULT 
@@ -51,5 +49,4 @@ while True:
     #iC.sideBySide(iG).show()
     #iD.sideBySide(iY).show()
     #iH.sideBySide(iE).show()
-    iN.sideBySide(iE).show()
 

@@ -70,17 +70,12 @@ static void saveMap(char *map, char* file)
     int16_t nx; int16_t ny; int16_t nz;
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
-            nx = nPrintMap[i*dW*3 + j*3 + 0];
-            ny = nPrintMap[i*dW*3 + j*3 + 1];
-            nz = nPrintMap[i*dW*3 + j*3 + 2];
-
             vx = vPrintMap[i*dW*3 + j*3 + 0];
             vy = vPrintMap[i*dW*3 + j*3 + 1];
             vz = vPrintMap[i*dW*3 + j*3 + 2];
 
             if (vz != 32001) {
                 f << vx << "," << vy << "," << vz << endl;
-                f << nx << "," << ny << "," << nz << endl;
             }
         }
     }

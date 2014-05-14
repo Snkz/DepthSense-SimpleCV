@@ -28,29 +28,6 @@ class DS325:
         iD = Image(depth.transpose())
         return iD.invert()
 
-    def getNormal(self):
-        ''' Return a simple cv compatiable 8bit depth image '''
-
-        normal = ds.getNormalMap()
-        #np.clip(normal, 0, 2**10 - 1, normal)
-        #normal >>=2
-        #normal = normal.astype(np.uint8)
-        #normal = normal[:,:,::-1]
-        return Image(normal.transpose([1,0,2]))
-
-    def getBlob(self, i, j, thresh_high, thresh_low):
-        ''' Return a simple cv compatiable 8bit depth image that contains only 
-        the blob found at index i,j with depth values that are at most 
-        +thresh_high or at least -thresh_low relative to the depth value at 
-        i, j'''
-
-        #blob = ds.getBlobAt(i,j, thresh_high, thresh_low)
-        #np.clip(blob, 0, 2**10 - 1, blob)
-        #blob >>=2
-        #blob = blob.astype(np.uint8)
-        #iB = Image(blob.transpose())
-        #return iB.invert()
-
 
     def getConvolvedDepth(self, kern, rep, bias):
         ''' Return a simple cv compatiable 8bit depth map that has had 
@@ -66,17 +43,13 @@ class DS325:
     def getDepthFull(self):
         ''' Return the pure 16bit depth map as a numpy array '''
          
-        depth = ds.getDepthMap()
-        depth = depth/125
-        iD = Image(depth.transpose())
+        iD = ds.getDepthMap()
         return iD
 
     def getConvolvedDepthFull(self, kern, rep, bias):
         ''' Return a pure numpy array of the convolved in the depthmap ''' 
 
-        edge = ds.convolveDepthMap(kern, rep, bias)
-        edge = edge/125
-        iE = Image(edge.transpose())
+        iE = ds.convolveDepthMap(kern, rep, bias)
         return iE
 
     def getVertex(self):

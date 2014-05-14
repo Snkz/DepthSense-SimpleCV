@@ -36,6 +36,4 @@ while True:
     #iC.sideBySide(iE).show()
     vertex = depthsense.getVertex()
     iV = Image(vertex.transpose([1,0,2]))
-    iN = depthsense.getNormal()
-    iV.sideBySide(iN).show()
 
