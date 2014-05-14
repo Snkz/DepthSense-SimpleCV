@@ -12,6 +12,12 @@ class DS325:
         used ''' 
         ds.initDepthSense()
 
+    def saveMap(self, name, file_name):
+        ''' Save the specified map to file file_name '''
+
+        ds.saveMap(name, file_name);
+        return
+
     def getDepth(self):
         ''' Return a simple cv compatiable 8bit depth image '''
 
@@ -22,38 +28,67 @@ class DS325:
         iD = Image(depth.transpose())
         return iD.invert()
 
+    def getNormal(self):
+        ''' Return a simple cv compatiable 8bit depth image '''
 
-    def getEdges(self, kern, rep):
-        '''Apply the specified kernel to the depth map 
-           kern in ["edge", "edge", "blur", "lapl", "sobx", "soby", "shrp"] 
-        '''
+        normal = ds.getNormalMap()
+        #np.clip(normal, 0, 2**10 - 1, normal)
+        #normal >>=2
+        #normal = normal.astype(np.uint8)
+        #normal = normal[:,:,::-1]
+        return Image(normal.transpose([1,0,2]))
 
-        edge = ds.getEdges(kern, rep)
-        np.clip(edge, 0, 2**10 - 1, edge)
-        edge >>=2
-        edge = edge.astype(np.uint8)
-        iE = Image(edge.transpose())
+    def getBlob(self, i, j, thresh_high, thresh_low):
+        ''' Return a simple cv compatiable 8bit depth image that contains only 
+        the blob found at index i,j with depth values that are at most 
+        +thresh_high or at least -thresh_low relative to the depth value at 
+        i, j'''
+
+        #blob = ds.getBlobAt(i,j, thresh_high, thresh_low)
+        #np.clip(blob, 0, 2**10 - 1, blob)
+        #blob >>=2
+        #blob = blob.astype(np.uint8)
+        #iB = Image(blob.transpose())
+        #return iB.invert()
+
+
+    def getConvolvedDepth(self, kern, rep, bias):
+        ''' Return a simple cv compatiable 8bit depth map that has had 
+        the specified kernel applied rep times '''
+
+        conv = ds.convolveDepthMap(kern, rep, bias)
+        np.clip(conv, 0, 2**10 - 1, conv)
+        conv >>=2
+        conv = conv.astype(np.uint8)
+        iE = Image(conv.transpose())
         return iE.invert()
-
 
     def getDepthFull(self):
         ''' Return the pure 16bit depth map as a numpy array '''
          
         depth = ds.getDepthMap()
-        iD = (depth.transpose())
+        depth = depth/125
+        iD = Image(depth.transpose())
         return iD
 
-    def getEdgesFull(self, kern, rep):
-        ''' Return a pure numpy array of highlighted edges in the depthmap ''' 
+    def getConvolvedDepthFull(self, kern, rep, bias):
+        ''' Return a pure numpy array of the convolved in the depthmap ''' 
 
-        edge = ds.getEdges(kern, rep)
-        iE = (edge.transpose())
+        edge = ds.convolveDepthMap(kern, rep, bias)
+        edge = edge/125
+        iE = Image(edge.transpose())
         return iE
 
     def getVertex(self):
         ''' Return a vertex map for points in the depth map as a numpy array'''
 
         return ds.getVertices()
+
+    def getVertexFP(self):
+        ''' Return a floating point vertex map for points in the depth map as 
+        a numpy array'''
+
+        return ds.getVerticesFP()
 
     def getImage(self):
         ''' Return a simple cv compatiable 8bit colour image ''' 
@@ -62,12 +97,25 @@ class DS325:
         image = image[:,:,::-1]
         return Image(image.transpose([1,0,2]))
 
+    def getGreyScale(self):
+        ''' Return a simple cv compatiable 8bit colour image ''' 
+
+        grey = ds.getGreyScaleMap()
+        return Image(grey.transpose())
+
+    def getConvolvedImage(self, kern, rep, bias):
+        ''' Return a simple cv compatiable 8bit greyscaled image that has had 
+        the specified kernel applied rep times with bias supplied'''
+
+        conv = ds.convolveColourMap(kern, rep, bias)
+        iE = Image(conv.transpose())
+        return iE.invert()
 
     def getDepthColoured(self):
         ''' Return a simple cv compatiable 8bit colour image ''' 
 
         depthc = ds.getDepthColouredMap()
-        depthc = depthc[:,:,::-1]
+        #depthc = depthc[:,:,::-1]
         return Image(depthc.transpose([1,0,2]))
 
 

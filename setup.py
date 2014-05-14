@@ -5,7 +5,7 @@ module = Extension('DepthSense',
         libraries = ['DepthSensePlugins', 'DepthSense', 'python2.7', 'turbojpeg'],
         library_dirs = ['/usr/local/lib', '/opt/softkinetic/DepthSenseSDK/lib'],
         #extra_compile_args = ['-std=g++11'],
-        sources = ['depthsense.cxx'])
+        sources = ['src/depthsense.cxx', 'src/initdepthsense.cxx', 'src/imageproccessing.cxx'])
 
 setup (name = 'DepthSense',
         version = '1.0',

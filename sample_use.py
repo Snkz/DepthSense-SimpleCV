@@ -17,9 +17,19 @@ while True:
     
     iH = depthsense.getDepthColoured()
     #iH.show() 
+    
+    iG = depthsense.getGreyScale()
+    #iG.show() 
 
-    iE = depthsense.getEdges("edgh", 1)
+    iN = depthsense.getNormal()
+    #iN.show() 
+
+    iE = depthsense.getConvolvedDepth("sobx", 1, 0.0)
     #iE.show()
+    
+    iC = depthsense.getConvolvedImage("scry", 1, 0.0)
+    #iCC = depthsense.getConvolvedImage("scrx", 1, 0.0)
+    #iC.show()
 
     # THESE THREE ARE NOT SIMPLECV IMAGES BY DEFAULT 
     vertex = depthsense.getVertex()
@@ -27,13 +37,19 @@ while True:
     iV = Image(vertex.transpose([1,0,2]))
     #iV.show()
 
+    vertexFP = depthsense.getVertexFP()
+    # vertex map does not get returned as an image as it makes no sense
+    iP = Image(vertexFP.transpose([1,0,2]))
+
     # accel is not returned as a simplecv image
     iA = depthsense.getAcceleration()
     # uv map is not returned as a simplecv image
     iU = depthsense.getUV()
 
-
+    #depthsense.saveMap("vertex", "vertex.asc");
     #iS.sideBySide(iV).show()
+    #iC.sideBySide(iG).show()
     #iD.sideBySide(iY).show()
-    iH.sideBySide(iE).show()
+    #iH.sideBySide(iE).show()
+    iN.sideBySide(iE).show()
 
