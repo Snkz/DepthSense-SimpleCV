@@ -125,6 +125,16 @@ void buildSyncMap()
 
 void buildDepthColoured() 
 {
+    float hue;
+    float sat;
+    float val;
+
+    float frac; float p; float q; float t;
+
+    int hueIndex; float hueRound;
+
+    uint8_t r; uint8_t g; uint8_t b;
+
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
             //TODO: Make this not complete shit
@@ -135,10 +145,59 @@ void buildDepthColoured()
             //depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) ((colour << (32 - 8*1)) >> (32 - 8));
             //depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) ((colour << (32 - 8*2)) >> (32 - 8));
             //depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) ((colour << (32 - 8*3)) >> (32 - 8));
+            //depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
+            //depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
+            //depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
 
-            depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
-            depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
-            depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
+            //hue = ((float)depthCMap[i*dW + j]) / 31999.0;
+            hue = ((float)depthCMap[i*dW + j]) / 32001.0;
+            sat = 0.6;
+            val = 1.0;
+            
+            hueRound = hue * 6.0;
+            hueIndex = (int) (((int)floor(hueRound)) % 6);
+            frac = hueRound - floor(hueRound);
+
+            p = val * (1.0 - sat);
+            q = val * (1.0 - frac * sat);
+            t = val * (1.0 - (1.0 - frac) * sat);
+
+            if (hueIndex == 0) {
+                r = (uint8_t) (val * 255);
+                g = (uint8_t) (t * 255);
+                b = (uint8_t) (p * 255);
+            } else if (hueIndex == 1) {
+                r = (uint8_t) (q * 255);
+                g = (uint8_t) (val * 255);
+                b = (uint8_t) (p * 255);
+            } else if (hueIndex == 2) {
+                r = (uint8_t) (p * 255);
+                g = (uint8_t) (val * 255);
+                b = (uint8_t) (t * 255);
+            } else if (hueIndex == 3) {
+                r = (uint8_t) (p * 255);
+                g = (uint8_t) (q * 255);
+                b = (uint8_t) (val * 255);
+            } else if (hueIndex == 4) {
+                r = (uint8_t) (t * 255);
+                g = (uint8_t) (p * 255);
+                b = (uint8_t) (val * 255);
+            } else if (hueIndex == 5) {
+                r = (uint8_t) (val * 255);
+                g = (uint8_t) (p * 255);
+                b = (uint8_t) (q * 255);
+            } else  {
+                r = 255;
+                g = 255;
+                b = 255;
+            }
+
+            depthColouredMap[i*dW*3 + j*3 + 0] = r;
+            depthColouredMap[i*dW*3 + j*3 + 1] = g;
+            depthColouredMap[i*dW*3 + j*3 + 2] = b;
+
+            cout << hueIndex << " " << r << " " << g << " " << b << endl;
+            cout << "fracts" << " " << p << " " << q << " " << t << " " << hue << " " << frac << endl;
 
         }
     }
@@ -181,7 +240,9 @@ static PyObject *getDepthColoured(PyObject *self, PyObject *args)
 
     memcpy(depthCMap, depthFullMap, dshmsz);
     memset(depthColouredMap, 0, hshmsz*3);
-        memcpy(depthColouredMapClone, depthColouredMap, hshmsz*3);
+
+    buildDepthColoured(); 
+    memcpy(depthColouredMapClone, depthColouredMap, hshmsz*3);
     return PyArray_SimpleNewFromData(3, dims, NPY_UINT8, depthColouredMapClone);
 }
 
