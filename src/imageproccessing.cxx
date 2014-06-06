@@ -363,6 +363,10 @@ void crossMaps()
     }
 }
 
+void leastSquaresPlane(int k) {
+    (void) k; // Use k to determine sizze of neighbours to consider
+} 
+
 /*
  * Convert colour image to greyscale
  */
