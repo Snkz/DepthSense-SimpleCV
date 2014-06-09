@@ -89,12 +89,61 @@ static void saveMap(char *map, char* file)
     f.close();
 }
 
+void getMedian(int ci, int cj, uint8_t *colx, uint8_t *coly, uint8_t *colz) 
+{
+    int blkthresh = 4;
+    int blklim = 25;
+    int blkcount = 0;
+    int count = 0;
+
+    uint8_t cx;
+    uint8_t cy;
+    uint8_t cz;
+
+    uint32_t tcx = 0;
+    uint32_t tcy = 0;
+    uint32_t tcz = 0;
+
+    // note this meth is a lie
+    for(int i=-1; i < 1; i++) {
+        for(int j=-1; j < 1; j++) {
+            if (ci - i > 0 && ci - i < cH && cj - j > 0 && cj - j < cW) {
+
+                cx = colourMapClone[(ci - i)*cW*3 + (cj - j)*3 + 0];
+                cy = colourMapClone[(ci - i)*cW*3 + (cj - j)*3 + 1];
+                cz = colourMapClone[(ci - i)*cW*3 + (cj - j)*3 + 2];
+
+                if ( cx < blklim && cy < blklim && cz < blklim) {
+                    blkcount++;
+                    continue;
+                } 
+
+                count++;
+                tcx += cx;
+                tcy += cy;
+                tcz += cz;
+            }
+        }
+    }
+
+    if (blkcount > blkthresh || count == 0) {
+        *colx = 0;
+        *coly = 0;
+        *colz = 0;
+        return;
+    }
+
+    *colx = (uint8_t)(tcx/(count));
+    *coly = (uint8_t)(tcy/(count));
+    *colz = (uint8_t)(tcz/(count));
+}
+
 void buildSyncMap()
 {
     int ci, cj;
-    uint8_t colx;
-    uint8_t coly;
-    uint8_t colz;
+    uint8_t *colx = (uint8_t *) malloc(sizeof(uint8_t));
+    uint8_t *coly = (uint8_t *) malloc(sizeof(uint8_t));
+    uint8_t *colz = (uint8_t *) malloc(sizeof(uint8_t));
     float uvx;
     float uvy;
 
@@ -102,22 +151,22 @@ void buildSyncMap()
         for(int j=0; j < dW; j++) {
             uvx = uvMapClone[i*dW*2 + j*2 + 0];    
             uvy = uvMapClone[i*dW*2 + j*2 + 1];    
-            colx = 0;
-            coly = 0;
-            colz = 0;
+
+            *colx = 0;
+            *coly = 0;
+            *colz = 0;
             
             if((uvx > 0 && uvx < 1 && uvy > 0 && uvy < 1) && 
                 (depthMapClone[i*dW + j] < 32000)){
                 ci = (int) (uvy * ((float) cH));
                 cj = (int) (uvx * ((float) cW));
-                colx = colourMapClone[ci*cW*3 + cj*3 + 0];
-                coly = colourMapClone[ci*cW*3 + cj*3 + 1];
-                colz = colourMapClone[ci*cW*3 + cj*3 + 2];
+
+                getMedian(ci, cj, colx, coly, colz);
             }
           
-            syncMapClone[i*dW*3 + j*3 + 0] = colx;
-            syncMapClone[i*dW*3 + j*3 + 1] = coly;
-            syncMapClone[i*dW*3 + j*3 + 2] = colz;
+            syncMapClone[i*dW*3 + j*3 + 0] = *colx;
+            syncMapClone[i*dW*3 + j*3 + 1] = *coly;
+            syncMapClone[i*dW*3 + j*3 + 2] = *colz;
 
         }
     }
@@ -135,22 +184,13 @@ void buildDepthColoured()
 
     uint8_t r; uint8_t g; uint8_t b;
 
+    uint32_t colour;
+
     for(int i=0; i < dH; i++) {
         for(int j=0; j < dW; j++) {
             //TODO: Make this not complete shit
-            //colour = ((uint32_t)depthCMap[i*dW + j]) * 524; // convert approx 2^15 bits of data to 2^24 bits  
-            //colour = 16777216.0*(((double)depthCMap[i*dW + j])/31999.0); // 2^24 * zval/~2^15(zrange)
-            //cout << depth << " " << depthCMap[i*dW + j] << endl;
-
-            //depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) ((colour << (32 - 8*1)) >> (32 - 8));
-            //depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) ((colour << (32 - 8*2)) >> (32 - 8));
-            //depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) ((colour << (32 - 8*3)) >> (32 - 8));
-            //depthColouredMap[i*dW*3 + j*3 + 0] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*1)) >> (16 - 5)) << 3);
-            //depthColouredMap[i*dW*3 + j*3 + 1] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*2)) >> (16 - 5)) << 3);
-            //depthColouredMap[i*dW*3 + j*3 + 2] = (uint8_t) (((depthCMap[i*dW + j] << (16 - 5*3)) >> (16 - 5)) << 3);
-
-            //hue = ((float)depthCMap[i*dW + j]) / 31999.0;
-            hue = ((float)depthCMap[i*dW + j]) / 32001.0;
+            hue = (log2(((float)depthCMap[i*dW + j]) / 32001.0) / -15.0);
+            //hue = ((float)depthCMap[i*dW + j]) / 32001.0;
             sat = 0.6;
             val = 1.0;
             
@@ -196,8 +236,8 @@ void buildDepthColoured()
             depthColouredMap[i*dW*3 + j*3 + 1] = g;
             depthColouredMap[i*dW*3 + j*3 + 2] = b;
 
-            cout << hueIndex << " " << r << " " << g << " " << b << endl;
-            cout << "fracts" << " " << p << " " << q << " " << t << " " << hue << " " << frac << endl;
+            //cout << hueIndex << " " << r << " " << g << " " << b << endl;
+            //cout << "fracts" << " " << p << " " << q << " " << t << " " << hue << " " << frac << endl;
 
         }
     }
