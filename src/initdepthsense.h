@@ -69,6 +69,7 @@ extern int16_t * dxMap;
 extern int16_t * dyMap;
 extern int16_t * diffMap;
 extern int16_t * diffResult;
+extern int16_t * normMap;
 extern int16_t * normalResult;
 
 

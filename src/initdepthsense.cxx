@@ -91,6 +91,7 @@ int16_t * dxMap;
 int16_t * dyMap;
 int16_t * diffMap;
 int16_t * diffResult;
+int16_t * normMap;
 int16_t * normalResult;
 
 // clean up
@@ -436,6 +437,7 @@ void killds()
         free(dyMap);
         free(diffMap);
         free(diffResult);
+        free(normMap);
         free(normalResult);
         cout << "DEPTHSENSE SHUTDOWN SUCCESSFUL" << endl;
 
@@ -506,6 +508,7 @@ void initds()
     dyMap = (int16_t *) initblock(dshmsz*3);
     diffMap = (int16_t *) initblock(dshmsz*3);
     diffResult = (int16_t *) initblock(dshmsz*3);
+    normMap = (int16_t *) initblock(dshmsz*3);
     normalResult = (int16_t *) initblock(dshmsz*3);
 
     child_pid = fork();

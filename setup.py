@@ -2,10 +2,11 @@ from distutils.core import setup, Extension
 
 module = Extension('DepthSense',
         include_dirs = ['/usr/local/include', '/opt/softkinetic/DepthSenseSDK/include'],
-        libraries = ['DepthSensePlugins', 'DepthSense', 'python2.7', 'turbojpeg'],
+        libraries = ['DepthSensePlugins', 'DepthSense', 'python2.7', 'turbojpeg', 'cln', 'ginac'],
         library_dirs = ['/usr/local/lib', '/opt/softkinetic/DepthSenseSDK/lib'],
         #extra_compile_args = ['-std=g++11'],
-        sources = ['src/depthsense.cxx', 'src/initdepthsense.cxx', 'src/imageproccessing.cxx'])
+        sources = ['src/depthsense.cxx', 'src/initdepthsense.cxx', 'src/imageproccessing.cxx', 'src/linalgproc.cxx']
+        )
 
 setup (name = 'DepthSense',
         version = '1.0',

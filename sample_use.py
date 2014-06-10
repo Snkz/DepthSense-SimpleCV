@@ -49,7 +49,7 @@ while True:
     #depthsense.saveMap("vertex", "vertex.asc");
     #iS.sideBySide(iV).show()
     #iC.sideBySide(iG).show()
-    #iD.sideBySide(iY).show()
-    #iH.sideBySide(iE).show()
-    iN.sideBySide(iE).show()
+    #iD.sideBySide(iE).show()
+    iH.sideBySide(iN).show()
+    #iN.sideBySide(iE).show()
 

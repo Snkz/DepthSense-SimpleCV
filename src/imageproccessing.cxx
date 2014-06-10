@@ -36,7 +36,9 @@
 // Application includes
 #include "imageproccessing.h"
 #include "initdepthsense.h"
+#include "linalgproc.h"
 
+using namespace std;
 /*
  * Set int kernel[9] to kernel defined by kern
  */
@@ -307,6 +309,25 @@ void applyKernel3D(char *kern, int W, int H, double bias)
         }
     }
 
+}
+
+/* 
+ * Compute normal of the vertex map
+ */
+void computeNormalMap() 
+{
+    memcpy(normMap, normalMap, dshmsz*3);
+    int coef[3];
+    cout << "compute Normal Map" << endl;
+    fflush(stdout);
+    for(int i=1; i < dH - 1; i++) {
+        for(int j=1; j < dW - 1; j++) {
+            computeNormal(i,j, coef);
+            normalResult[i*dW*3 + j*3 + 0] = (int16_t)coef[0];
+            normalResult[i*dW*3 + j*3 + 1] = (int16_t)coef[1];
+            normalResult[i*dW*3 + j*3 + 2] = (int16_t)coef[2];
+        }
+    }
 }
 
 /* 

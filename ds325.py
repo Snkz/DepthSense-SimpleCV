@@ -115,7 +115,7 @@ class DS325:
         ''' Return a simple cv compatiable 8bit colour image ''' 
 
         depthc = ds.getDepthColouredMap()
-        #depthc = depthc[:,:,::-1]
+        depthc = depthc[:,:,::-1]
         return Image(depthc.transpose([1,0,2]))
 
 

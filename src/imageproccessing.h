@@ -92,6 +92,12 @@ void computeDifferential(char *kern, double bias);
  */
 void crossMaps(void); 
 
+/*
+ * Compute the normal map by finding the normal to the tangent plane
+ * specified in the vertexMap
+ */
+void computeNormalMap(void); 
+
 /* 
  * Convert the colour buffer into greyscale values by given weights
  */

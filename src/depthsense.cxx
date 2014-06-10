@@ -428,8 +428,9 @@ static PyObject *getNormal(PyObject *self, PyObject *args)
     memcpy(normalMap, vertexFullMap, vshmsz*3);
     double bias = 0.5;
     char * kern = (char*)"placeholder";
-    computeDifferential(kern, bias); // applies sobel kernel to each plane 
-    crossMaps(); // cross product on three planes, store in normalMap result
+    //computeDifferential(kern, bias); // applies sobel kernel to each plane 
+    //crossMaps(); // cross product on three planes, store in normalMap result
+    computeNormalMap();
 
     npy_intp dims[3] = {dH, dW, 3};
     memcpy(normalResultClone, normalResult, dshmsz*3); 
