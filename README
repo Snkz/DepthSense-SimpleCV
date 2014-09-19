@@ -7,3 +7,5 @@ If everythings inorder, install with the following command:
 	sudo python2 setup.py install
 
 run sample_use.py to see if its all good
+
+Note the python2 thing is cause of simplecv, code requires minor changes to work with python3 (change the python header, dont use the simplecv functions)
