@@ -9,3 +9,7 @@ If everythings inorder, install with the following command:
 run sample_use.py to see if its all good
 
 Note the python2 thing is cause of simplecv, code requires minor changes to work with python3 (change the python header, dont use the simplecv functions)
+
+Don't stay quiet, if there's issues setting this up, Let me know.
+
+Also if anyone can get the Depthsense ARM/Android SDK (it exists, somewhere) let me know, I need it!
